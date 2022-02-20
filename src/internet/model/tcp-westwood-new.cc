@@ -216,7 +216,7 @@ namespace ns3
     TcpWestwoodNew::CongestionAvoidance(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
     {
         NS_LOG_FUNCTION(this << tcb << segmentsAcked);
-        // NS_LOG_DEBUG("TcpWestwoodNew::CongestionAvoidance");
+        // NS_LOG_DEBUG("TcpWestwoodNew::CongestionAvoidance := " << GetName());
         if (segmentsAcked > 0)
         {
             double adder = static_cast<double>(tcb->m_segmentSize * tcb->m_segmentSize) / tcb->m_cWnd.Get();
@@ -243,13 +243,21 @@ namespace ns3
                 NS_LOG_DEBUG("TcpWestwoodNew::CongestionAvoidance := "
                              << " 0 < bandwidth ratio  ");
             }
-            NS_LOG_DEBUG(" < " << Simulator::Now().GetSeconds() << " > " "TcpWestwoodNew::CongestionAvoidance := adding : " << adder << " cWnd : " << tcb->m_cWnd.Get() << " b_ratio : " << _bw_ratio);
+            NS_LOG_DEBUG(" < " << Simulator::Now().GetSeconds() << " > "
+                                                                   "TcpWestwoodNew::CongestionAvoidance := adding : "
+                               << adder << " cWnd : " << tcb->m_cWnd.Get() << " b_ratio : " << _bw_ratio);
 
             ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
 
             tcb->m_cWnd += static_cast<uint32_t>(adder);
             NS_LOG_INFO("In CongAvoid, updated to cwnd " << tcb->m_cWnd << " ssthresh " << tcb->m_ssThresh);
         }
+    }
+
+    std::string
+    TcpWestwoodNew::GetName() const
+    {
+        return "TcpWestwoodNew";
     }
 
     Ptr<TcpCongestionOps>
