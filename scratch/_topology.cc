@@ -183,10 +183,10 @@ NS_LOG_COMPONENT_DEFINE("_topology");
 int main(int argc, char *argv[])
 {
 
-    LogComponentEnable("_topology", LOG_LEVEL_INFO);
-    LogComponentEnable("TcpWestwoodNew", LOG_DEBUG);
+    // LogComponentEnable("_topology", LOG_LEVEL_INFO);
+    // LogComponentEnable("TcpWestwoodNew", LOG_DEBUG);
     // LogComponentEnable("TcpWestwood", LOG_LEVEL_ALL);
-    // LogComponentEnable("TcpSocketBase", LOG_DEBUG);
+    // LogComponentEnable("TcpSocketBase", LOG_FUNCTION);
 
     double error_p = 0.0;
 
@@ -208,6 +208,7 @@ int main(int argc, char *argv[])
 
     CommandLine cmd(__FILE__);
     std::string transport_prot = "TcpWestwoodNew";
+    // transport_prot = "TcpWestwood";
     cmd.AddValue("tcpTypeId", "Transport protocol to use: TcpNewReno, TcpBbr", transport_prot);
     cmd.AddValue("delAckCount", "Delayed ACK count", delAckCount);
     cmd.AddValue("enablePcap", "Enable/Disable pcap file generation", enablePcap);
@@ -284,7 +285,7 @@ int main(int argc, char *argv[])
     //
     //    }
 
-    int _number_of_flows = 50;
+    int _number_of_flows = 10;
 
     bool isFixed = false;
     if (isFixed)
@@ -374,7 +375,7 @@ int main(int argc, char *argv[])
     // flowmon.SerializeToXmlFile("mytest.flowmonitor", true, true);
     Simulator::Destroy();
 
-    // shFlow(&flowmon, monitor, dir + "/tcpwestwood.data");
+    shFlow(&flowmon, monitor, dir + "/tcpwestwood.data");
 
     return 0;
 }
