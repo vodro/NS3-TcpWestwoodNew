@@ -4496,7 +4496,7 @@ namespace ns3
       std::cout << "< " << Simulator::Now().GetSeconds() << " > Exit Recovery : pre_rto : " << _m_rto.GetSeconds() << " - >  now_rto : " << _temp_rto.GetSeconds() << std::endl;
       m_rto = _temp_rto;
     }
-    std::cout << "Congestion recovery exits : " << m_congestionControl->GetName() << " pre_rtt :" << m_tcb->_pre_Rtt.GetSeconds() << " ->  now_rto : " << _now_Rtt.GetSeconds() << std::endl;
+    std::cout << "Congestion recovery exits : " << m_congestionControl->GetName() << " pre_rtt :" << m_tcb->_pre_Rtt.GetSeconds() << " ->  now_rtt : " << _now_Rtt.GetSeconds() << std::endl;
   }
   ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
 
