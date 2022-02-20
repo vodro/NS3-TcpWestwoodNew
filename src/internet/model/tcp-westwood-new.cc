@@ -85,7 +85,7 @@ namespace ns3
                                                                  m_fType(sock.m_fType),
                                                                  m_IsCount(sock.m_IsCount)
     {
-        NS_LOG_DEBUG("TcpWestwoodNew::GetTypeId called !");
+        // NS_LOG_DEBUG("TcpWestwoodNew::GetTypeId called !");
 
         NS_LOG_FUNCTION(this);
         NS_LOG_LOGIC("Invoked the copy constructor");
@@ -243,7 +243,7 @@ namespace ns3
                 NS_LOG_DEBUG("TcpWestwoodNew::CongestionAvoidance := "
                              << " 0 < bandwidth ratio  ");
             }
-            NS_LOG_DEBUG(Simulator::Now().GetSeconds() << "TcpWestwoodNew::CongestionAvoidance := adding : " << adder << " cWnd : " << tcb->m_cWnd.Get() << " b_ratio : " << _bw_ratio);
+            NS_LOG_DEBUG(" < " << Simulator::Now().GetSeconds() << " > " "TcpWestwoodNew::CongestionAvoidance := adding : " << adder << " cWnd : " << tcb->m_cWnd.Get() << " b_ratio : " << _bw_ratio);
 
             ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
 
