@@ -1562,6 +1562,7 @@ namespace ns3
   void
   TcpSocketBase::EnterRecovery(uint32_t currentDelivered)
   {
+    std::cout << "< " << Simulator::Now().GetSeconds() << " > TcpSocketBase::EnterRecovery" << std::endl;
     NS_LOG_FUNCTION(this);
     NS_ASSERT(m_tcb->m_congState != TcpSocketState::CA_RECOVERY);
 
@@ -1779,6 +1780,7 @@ namespace ns3
       {
         m_tcb->m_cWnd = m_tcb->m_ssThresh.Get();
         m_recoveryOps->ExitRecovery(m_tcb);
+        std::cout << "CA_CWR is going on!" << std::endl;
         m_congestionControl->CwndEvent(m_tcb, TcpSocketState::CA_EVENT_COMPLETE_CWR);
       }
     }
@@ -2090,6 +2092,15 @@ namespace ns3
           m_tcb->m_cWnd = m_tcb->m_ssThresh.Get();
           m_recoveryOps->ExitRecovery(m_tcb);
           NS_LOG_DEBUG("Leaving Fast Recovery; BytesInFlight() = " << BytesInFlight() << "; cWnd = " << m_tcb->m_cWnd);
+
+          ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
+          // std::cout << m_congestionControl->GetName() << std::endl;
+          std::cout << " ---- exiting recovery!  " << std::endl;
+          if (m_congestionControl->GetName() == "TcpWestwoodNew")
+          {
+            _update_rto_after_recovery_complete();
+          }
+          ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
         }
         if (m_tcb->m_congState == TcpSocketState::CA_OPEN)
         {
@@ -3474,7 +3485,8 @@ namespace ns3
       ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
 
       m_tcb->_pre_Rtt = m_tcb->m_lastRtt;
-
+      // std::cout << "EstimateRtt : " << m_tcb->_pre_Rtt.GetSeconds()
+      //           << " -> " << m_rtt->GetEstimate().GetSeconds() << std::endl;
       ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
 
       m_tcb->m_lastRtt = m_rtt->GetEstimate();
@@ -4465,5 +4477,27 @@ namespace ns3
         retx(h.retx)
   {
   }
+
+  ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
+
+  void TcpSocketBase::_update_rto_after_recovery_complete()
+  {
+    Time _now_Rtt = m_tcb->m_lastRtt;
+    if (m_tcb->_pre_Rtt.IsZero())
+    {
+      std::cerr << "Exit Recovery : something is wrong. previous rtt is zero " << std::endl;
+    }
+    else
+    {
+      Time _m_rto = _m_rto;
+
+      Time _temp_rto = Seconds(_now_Rtt.GetSeconds() / m_tcb->_pre_Rtt.GetSeconds() * _m_rto.GetSeconds());
+      std::cout << "< " << Simulator::Now().GetSeconds() << " > Exit Recovery : " << _now_Rtt.GetSeconds() / m_tcb->_pre_Rtt.GetSeconds() << " * " << _m_rto.GetSeconds() << std::endl;
+      std::cout << "< " << Simulator::Now().GetSeconds() << " > Exit Recovery : pre_rto : " << _m_rto.GetSeconds() << " - >  now_rto : " << _temp_rto.GetSeconds() << std::endl;
+      m_rto = _temp_rto;
+    }
+    std::cout << "Congestion recovery exits : " << m_congestionControl->GetName() << " pre_rtt :" << m_tcb->_pre_Rtt.GetSeconds() << " ->  now_rto : " << _now_Rtt.GetSeconds() << std::endl;
+  }
+  ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
 
 } // namespace ns3
