@@ -184,7 +184,7 @@ int main(int argc, char *argv[])
 {
 
     LogComponentEnable("_topology", LOG_LEVEL_INFO);
-    // LogComponentEnable("TcpWestwoodNew", LOG_DEBUG);
+    LogComponentEnable("TcpWestwoodNew", LOG_DEBUG);
     // LogComponentEnable("TcpWestwood", LOG_LEVEL_ALL);
     // LogComponentEnable("TcpSocketBase", LOG_DEBUG);
 
@@ -284,7 +284,7 @@ int main(int argc, char *argv[])
     //
     //    }
 
-    int _number_of_flows = 5;
+    int _number_of_flows = 50;
 
     bool isFixed = false;
     if (isFixed)
