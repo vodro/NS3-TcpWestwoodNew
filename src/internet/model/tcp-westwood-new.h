@@ -108,6 +108,12 @@ namespace ns3
 
         virtual Ptr<TcpCongestionOps> Fork();
 
+        ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
+
+        virtual std::string GetName() const;
+
+        ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
+
     private:
         /**
          * Update the total number of acknowledged packets during the current RTT
@@ -146,7 +152,6 @@ namespace ns3
         double _bw_ratio; // out bandwidth ratio
 
         ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
-    
     };
 
 } // namespace ns3
