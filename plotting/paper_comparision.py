@@ -4,18 +4,21 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-prot = ['TcpNewReno', 'TcpWestwood', 'TcpWestWoodNew']
+prots = ['TcpNewReno', 'TcpWestwood', 'TcpWestwoodNew']
 
 
 def plot(dfs):
 
-    col_names = df.keys().values.tolist()
+    col_names = dfs[0].keys().values.tolist()
 
     for i in range(1, len(col_names)):
-        time_col = df[col_names[0]].tolist()
-        val_col = df[col_names[i]].tolist()
-        print(val_col)
-        plt.plot(time_col, val_col, label='TcpWestWoodNew')
+
+        for df in dfs:
+            time_col = df[col_names[0]].tolist()
+            val_col = df[col_names[i]].tolist()
+            # print(val_col)
+            plt.plot(time_col, val_col, label=df.name)
+        plt.legend()
         plt.title(col_names[i] + ' vs ' + col_names[0])
         plt.xlabel(col_names[0])
         plt.ylabel(col_names[i])
@@ -24,5 +27,9 @@ def plot(dfs):
 
 
 if __name__ == '__main__':
-    df = pd.read_csv('../_temp/now/TcpWestwood_state.csv')
-    plot(df)
+    dfs = []
+    for prot in prots:
+        df = pd.read_csv('../_temp/now/' + prot + '_state.csv')
+        df.name = prot
+        dfs.append(df)
+    plot(dfs)
