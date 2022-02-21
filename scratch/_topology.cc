@@ -83,8 +83,16 @@ public:
 };
 
 std::string dir;
-uint32_t *prev;
+uint32_t *_prev_txBytes;
+uint32_t *_prev_rxBytes;
+// Maybe Time ?
+double *_prev_delaySum;
+uint32_t *_prev_rxPackets;
+uint32_t *_prev_lostPackets;
+
 Time prevTime = Seconds(0);
+
+std::string _output_file_name = "stat.csv";
 
 // Calculate throughput
 static void
@@ -94,19 +102,58 @@ TraceThroughput(Ptr<FlowMonitor> monitor)
     Time curTime = Now();
 
     int cnt = 0;
-    int total = 0;
+    uint32_t _total_throughput = 0;
+    double _total_delay = 0;
+    uint32_t _total_recived_packets = 0;
+    uint32_t _total_lost_packets = 0;
+    uint32_t _total_cumulative_lost_packets = 0;
+    double _total_cumulative_throughput = 0;
     for (auto itr = stats.begin(); itr != stats.end(); itr++)
     {
         // std::cout << cnt << std::endl;
-        std::ofstream thr(dir + "/throughput" + std::to_string(cnt + 1) + ".dat", std::ios::out | std::ios::app);
-        int diff = (itr->second.txBytes - prev[cnt]);
-        total += diff;
-        thr << curTime.GetSeconds() << " " << 8 * (itr->second.txBytes - prev[cnt]) / (1000 * 1000 * (curTime.GetSeconds() - prevTime.GetSeconds())) << std::endl;
-        prev[cnt] = itr->second.txBytes;
+        // std::ofstream thr(dir + "/throughput" + std::to_string(cnt + 1) + ".dat", std::ios::out | std::ios::app);
+        // throughput
+        uint32_t dx_throughput = (itr->second.txBytes - _prev_txBytes[cnt]);
+        _total_throughput += dx_throughput;
+
+        // cumulative throughput
+        _total_cumulative_throughput += (itr->second.txBytes);
+
+        // delay
+        double dx_delay = (itr->second.delaySum.GetSeconds() - _prev_delaySum[cnt]);
+        uint32_t dx_packets_received = (itr->second.rxPackets - _prev_rxPackets[cnt]);
+
+        _total_delay += dx_delay;
+        _total_recived_packets += dx_packets_received;
+
+        // packet loss in number of packets, we should change it to byte according to paper
+        uint32_t dx_packet_lost = (itr->second.lostPackets - _prev_lostPackets[cnt]);
+        _total_lost_packets += dx_packet_lost;
+
+        // cumulative lost packets
+        _total_cumulative_lost_packets += itr->second.lostPackets;
+
+        // update of arrays
+        _prev_txBytes[cnt] = itr->second.txBytes;
+        _prev_rxBytes[cnt] = itr->second.rxBytes;
+        _prev_delaySum[cnt] = itr->second.delaySum.GetSeconds();
+        _prev_rxPackets[cnt] = itr->second.rxPackets;
+        _prev_lostPackets[cnt] = itr->second.lostPackets;
+
+        // thr << curTime.GetSeconds() << " " << 8 * (itr->second.txBytes - prev[cnt]) / (1000 * 1000 * (curTime.GetSeconds() - prevTime.GetSeconds())) << std::endl;
+        // prev[cnt] = itr->second.txBytes;
         cnt++;
     }
-    std::ofstream thr(dir + "/throughput" + std::to_string(0) + ".dat", std::ios::out | std::ios::app);
-    thr << curTime.GetSeconds() << " " << 8 * total / (1000 * 1000 * (curTime.GetSeconds() - prevTime.GetSeconds())) << std::endl;
+    // std::cout << cnt << std::endl;
+    std::ofstream out(dir + _output_file_name, std::ios::out | std::ios::app);
+    double _dx_time = curTime.GetSeconds() - prevTime.GetSeconds();
+    out << curTime.GetSeconds();
+    out << "," << 8 * _total_throughput / (1000 * 1000 * _dx_time);                         // throughput
+    out << "," << 8 * _total_cumulative_throughput / (1000 * 1000 * curTime.GetSeconds());  // cumulative
+    out << "," << (_total_recived_packets > 0 ? _total_delay / _total_recived_packets : 1); // delay
+    out << "," << _total_lost_packets;
+    out << "," << _total_cumulative_lost_packets; // cumul lost packets
+    out << std::endl;                             //
 
     prevTime = curTime;
 
@@ -209,6 +256,7 @@ int main(int argc, char *argv[])
     CommandLine cmd(__FILE__);
     std::string transport_prot = "TcpWestwoodNew";
     // transport_prot = "TcpWestwood";
+    std::cout << "our transport : " << transport_prot << std::endl;
     cmd.AddValue("tcpTypeId", "Transport protocol to use: TcpNewReno, TcpBbr", transport_prot);
     cmd.AddValue("delAckCount", "Delayed ACK count", delAckCount);
     cmd.AddValue("enablePcap", "Enable/Disable pcap file generation", enablePcap);
@@ -296,17 +344,29 @@ int main(int argc, char *argv[])
     int _sinks[] = {4, 3, 4};
     srand(time(NULL));
 
-    prev = new uint32_t[2 * _number_of_flows];
+    // prev = new uint32_t[2 * _number_of_flows];
+    _prev_txBytes = new uint32_t[2 * _number_of_flows];
+    _prev_rxBytes = new uint32_t[2 * _number_of_flows];
+    _prev_delaySum = new double[2 * _number_of_flows];
+    _prev_rxPackets = new uint32_t[2 * _number_of_flows];
+    _prev_lostPackets = new uint32_t[2 * _number_of_flows];
+
     for (int i = 0; i < 2 * _number_of_flows; i++)
     {
-        prev[i] = 0;
+        _prev_txBytes[i] = 0;
+        _prev_rxBytes[i] = 0;
+        _prev_delaySum[i] = 0;
+        _prev_rxPackets[i] = 0;
+        _prev_lostPackets[i] = 0;
     }
 
     int uniquePort = 44000;
     for (int i = 0; i < _number_of_flows; i++)
     {
         int f = rand() % numberOfNodes;
+        f = 0;
         int s = rand() % numberOfNodes;
+        s = 4;
         if (isFixed)
             f = _sources[i], s = _sinks[i];
 
@@ -355,7 +415,7 @@ int main(int argc, char *argv[])
     //    Address sourceLocalAddress(InetSocketAddress(source->Ge))
 
     // Create a new directory to store the output of the program
-    dir = "_temp/" + std::string("now");
+    dir = "_temp/" + std::string("now") + "/";
     std::string dirToRem = "rm -R " + dir;
     system(dirToRem.c_str());
     std::string dirToSave = "mkdir -p " + dir;
@@ -367,6 +427,15 @@ int main(int argc, char *argv[])
     // Check for dropped packets using Flow Monitor
     FlowMonitorHelper flowmon;
     Ptr<FlowMonitor> monitor = flowmon.InstallAll();
+    std::ofstream out(dir + _output_file_name, std::ios::out | std::ios::app);
+    out << "time(s), "
+        << "throughput(Mbps), "
+        << "cumlative_throughput(Mbps), "
+        << "avg_delay(s),"
+        << "lost_packets, "
+        << "_total_lost_packets" << std::endl;
+    out.flush();
+    out.close();
     Simulator::Schedule(Seconds(0 + 0.02), &TraceThroughput, monitor);
 
     Simulator::Stop(stopTime + TimeStep(1));
