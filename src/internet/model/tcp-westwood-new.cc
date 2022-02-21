@@ -225,11 +225,11 @@ namespace ns3
 
             ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
 
-            if (_bw_ratio >= 1.25)
+            if (_bw_ratio >= 1.5)
             {
                 adder *= 2;
                 NS_LOG_DEBUG("TcpWestwoodNew::CongestionAvoidance := "
-                             << "bandwidth ratio greater than 1.25 ");
+                             << "bandwidth ratio greater than 1.5 ");
             }
             else if (_bw_ratio >= 1)
             {
