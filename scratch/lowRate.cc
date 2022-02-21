@@ -324,7 +324,7 @@ int main(int argc, char **argv)
     // cmd.AddValue("useIpv6", "Use Ipv6", useV6);
     cmd.Parse(argc, argv);
 
-    int numberOfNodes = 6;
+    int numberOfNodes = 8;
     int _num_left_nodes = numberOfNodes / 2;
     int _num_right_nodes = numberOfNodes / 2;
     Time stopTime = Seconds(100);
@@ -347,9 +347,9 @@ int main(int argc, char **argv)
     l_mobility.SetPositionAllocator("ns3::GridPositionAllocator",
                                     "MinX", DoubleValue(0.0),
                                     "MinY", DoubleValue(0.0),
-                                    "DeltaX", DoubleValue(.5),
-                                    "DeltaY", DoubleValue(1),
-                                    "GridWidth", UintegerValue(2),
+                                    "DeltaX", DoubleValue(.01),
+                                    "DeltaY", DoubleValue(.01),
+                                    "GridWidth", UintegerValue(ceil(sqrt(_num_left_nodes))),
                                     "LayoutType", StringValue("RowFirst"));
 
     l_mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
@@ -360,9 +360,9 @@ int main(int argc, char **argv)
     r_mobility.SetPositionAllocator("ns3::GridPositionAllocator",
                                     "MinX", DoubleValue(35.0),
                                     "MinY", DoubleValue(-50),
-                                    "DeltaX", DoubleValue(.5),
-                                    "DeltaY", DoubleValue(1),
-                                    "GridWidth", UintegerValue(2),
+                                    "DeltaX", DoubleValue(.01),
+                                    "DeltaY", DoubleValue(.01),
+                                    "GridWidth", UintegerValue(ceil(sqrt(_num_left_nodes))),
                                     "LayoutType", StringValue("RowFirst"));
 
     r_mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
@@ -435,19 +435,61 @@ int main(int argc, char **argv)
 
     ApplicationContainer serverApps;
     ApplicationContainer sinkApps;
-
+    uint_fast32_t unique_port = 45345;
     srand(0);
+    // for (int i = 1; i < _num_left_nodes; i++)
+    // {
+    //     std::cout << i << std::endl;
+    //     int sin = i;
+    //     int ser = rand() % _num_right_nodes;
+    //     /* Install TCP Receiver on the access point */
+    //     PacketSinkHelper sinkHelper("ns3::TcpSocketFactory", Inet6SocketAddress(Ipv6Address::GetAny(), 9));
+    //     sinkApps.Add(sinkHelper.Install(r_nodes.Get(sin)));
+
+    //     // /* Install TCP/UDP Transmitter on the station */
+    //     OnOffHelper server("ns3::TcpSocketFactory", (Inet6SocketAddress(r_interfaces.GetAddress(sin, 1), 9)));
+    //     server.SetAttribute("PacketSize", UintegerValue(1024));
+    //     server.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
+    //     server.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
+    //     server.SetAttribute("DataRate", DataRateValue(DataRate("1Mbps")));
+    //     serverApps.Add(server.Install(l_nodes.Get(ser)));
+
+    //     // std::cout << " after : " << i << std::endl;
+    // }
+
     for (int i = 1; i < _num_left_nodes; i++)
     {
-        std::cout << i << std::endl;
-        int sin = i;
-        int ser = rand() % _num_right_nodes;
+        // std::cout << i << std::endl;
+        int sin = 0;
+        int ser = i;
+        unique_port++;
         /* Install TCP Receiver on the access point */
-        PacketSinkHelper sinkHelper("ns3::TcpSocketFactory", Inet6SocketAddress(Ipv6Address::GetAny(), 9));
+        PacketSinkHelper sinkHelper("ns3::TcpSocketFactory", Inet6SocketAddress(Ipv6Address::GetAny(), unique_port));
         sinkApps.Add(sinkHelper.Install(r_nodes.Get(sin)));
 
         // /* Install TCP/UDP Transmitter on the station */
-        OnOffHelper server("ns3::TcpSocketFactory", (Inet6SocketAddress(r_interfaces.GetAddress(sin, 1), 9)));
+        OnOffHelper server("ns3::TcpSocketFactory", (Inet6SocketAddress(r_interfaces.GetAddress(sin, 1), unique_port)));
+        server.SetAttribute("PacketSize", UintegerValue(1024));
+        server.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
+        server.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
+        server.SetAttribute("DataRate", DataRateValue(DataRate("1Mbps")));
+        serverApps.Add(server.Install(l_nodes.Get(ser)));
+
+        // std::cout << " after : " << i << std::endl;
+    }
+
+    for (int i = 1; i < _num_left_nodes; i++)
+    {
+        // std::cout << i << std::endl;
+        int sin = i;
+        int ser = 0;
+        unique_port++;
+        /* Install TCP Receiver on the access point */
+        PacketSinkHelper sinkHelper("ns3::TcpSocketFactory", Inet6SocketAddress(Ipv6Address::GetAny(), unique_port));
+        sinkApps.Add(sinkHelper.Install(r_nodes.Get(sin)));
+
+        // /* Install TCP/UDP Transmitter on the station */
+        OnOffHelper server("ns3::TcpSocketFactory", (Inet6SocketAddress(r_interfaces.GetAddress(sin, 1), unique_port)));
         server.SetAttribute("PacketSize", UintegerValue(1024));
         server.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
         server.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
