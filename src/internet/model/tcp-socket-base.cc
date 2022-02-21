@@ -1562,7 +1562,9 @@ namespace ns3
   void
   TcpSocketBase::EnterRecovery(uint32_t currentDelivered)
   {
-    std::cout << "< " << Simulator::Now().GetSeconds() << " > TcpSocketBase::EnterRecovery" << std::endl;
+    std::cout << "< " << Simulator::Now().GetSeconds() << ", " << m_congestionControl->GetName() << " > "
+              << " TcpSocketBase::EnterRecovery" << std::endl;
+    // std::cout << "< " << Simulator::Now().GetSeconds() << " > TcpSocketBase::EnterRecovery" << std::endl;
     NS_LOG_FUNCTION(this);
     NS_ASSERT(m_tcb->m_congState != TcpSocketState::CA_RECOVERY);
 
@@ -1780,7 +1782,16 @@ namespace ns3
       {
         m_tcb->m_cWnd = m_tcb->m_ssThresh.Get();
         m_recoveryOps->ExitRecovery(m_tcb);
-        std::cout << "CA_CWR is going on!" << std::endl;
+
+        /////////////////////////////// vodro
+        std::cout << "< " << Simulator::Now().GetSeconds() << ", " << m_congestionControl->GetName() << " > "
+                  << " TcpSocketBase::ExitFastRecovery" << std::endl;
+
+        if (m_congestionControl->GetName() == "TcpWestwoodNew")
+        {
+          _update_rto_after_recovery_complete();
+        }
+        /////////////////////////////// vodro
         m_congestionControl->CwndEvent(m_tcb, TcpSocketState::CA_EVENT_COMPLETE_CWR);
       }
     }
@@ -2094,8 +2105,8 @@ namespace ns3
           NS_LOG_DEBUG("Leaving Fast Recovery; BytesInFlight() = " << BytesInFlight() << "; cWnd = " << m_tcb->m_cWnd);
 
           ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
-          // std::cout << m_congestionControl->GetName() << std::endl;
-          std::cout << " ---- exiting recovery!  " << std::endl;
+          std::cout << "< " << Simulator::Now().GetSeconds() << ", " << m_congestionControl->GetName() << " > "
+                    << " TcpSocketBase::ExitFastRecovery" << std::endl;
           if (m_congestionControl->GetName() == "TcpWestwoodNew")
           {
             _update_rto_after_recovery_complete();
@@ -4489,14 +4500,19 @@ namespace ns3
     }
     else
     {
-      Time _m_rto = _m_rto;
+      Time _m_rto = m_rto;
 
       Time _temp_rto = Seconds(_now_Rtt.GetSeconds() / m_tcb->_pre_Rtt.GetSeconds() * _m_rto.GetSeconds());
-      std::cout << "< " << Simulator::Now().GetSeconds() << " > Exit Recovery : " << _now_Rtt.GetSeconds() / m_tcb->_pre_Rtt.GetSeconds() << " * " << _m_rto.GetSeconds() << std::endl;
-      std::cout << "< " << Simulator::Now().GetSeconds() << " > Exit Recovery : pre_rto : " << _m_rto.GetSeconds() << " - >  now_rto : " << _temp_rto.GetSeconds() << std::endl;
+
+      // std::cout << m_congestionControl->GetName() << std::endl;
+
+      std::cout << "< " << Simulator::Now().GetSeconds() << ", " << m_congestionControl->GetName() << " > "
+                << " Exit Recovery : " << _now_Rtt.GetSeconds() / m_tcb->_pre_Rtt.GetSeconds() << " * " << _m_rto.GetSeconds() << std::endl;
+      std::cout << "< " << Simulator::Now().GetSeconds() << ", " << m_congestionControl->GetName() << " > "
+                << " Exit Recovery : pre_rto : " << _m_rto.GetSeconds() << " - >  now_rto : " << _temp_rto.GetSeconds() << std::endl;
       m_rto = _temp_rto;
     }
-    std::cout << "Congestion recovery exits : " << m_congestionControl->GetName() << " pre_rtt :" << m_tcb->_pre_Rtt.GetSeconds() << " ->  now_rtt : " << _now_Rtt.GetSeconds() << std::endl;
+    // std::cout << "Congestion recovery exits : " << m_congestionControl->GetName() << " pre_rtt :" << m_tcb->_pre_Rtt.GetSeconds() << " ->  now_rtt : " << _now_Rtt.GetSeconds() << std::endl;
   }
   ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
 

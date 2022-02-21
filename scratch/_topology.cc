@@ -92,7 +92,7 @@ uint32_t *_prev_lostPackets;
 
 Time prevTime = Seconds(0);
 
-std::string _output_file_name = "stat.csv";
+std::string _output_file_name = "_state.csv";
 
 // Calculate throughput
 static void
@@ -246,6 +246,9 @@ int main(int argc, char *argv[])
     strftime(buffer, sizeof(buffer), "%d-%m-%Y-%I-%M-%S", timeinfo);
     std::string currentTime(buffer);
 
+    std::string transport_prot = "TcpWestwoodNew";
+    // transport_prot = "TcpWestwood";
+
     // std::string tcpTypeId = "TcpBbr";
     //    std::string queueDisc = "FifoQueueDisc";
     uint32_t delAckCount = 2;
@@ -254,18 +257,18 @@ int main(int argc, char *argv[])
     Time stopTime = Seconds(10);
 
     CommandLine cmd(__FILE__);
-    std::string transport_prot = "TcpWestwoodNew";
-    // transport_prot = "TcpWestwood";
-    std::cout << "our transport : " << transport_prot << std::endl;
-    cmd.AddValue("tcpTypeId", "Transport protocol to use: TcpNewReno, TcpBbr", transport_prot);
+
+    cmd.AddValue("transport_prot", "Transport protocol to use: TcpNewReno, TcpWestwood, TcpWestwoodNew", transport_prot);
     cmd.AddValue("delAckCount", "Delayed ACK count", delAckCount);
     cmd.AddValue("enablePcap", "Enable/Disable pcap file generation", enablePcap);
     cmd.AddValue("stopTime", "Stop time for applications / simulation time will be stopTime + 1", stopTime);
     cmd.Parse(argc, argv);
 
-    transport_prot = std::string("ns3::") + transport_prot;
+    std::cout << "our transport : " << transport_prot << std::endl;
+    _output_file_name = transport_prot + _output_file_name;
+    // transport_prot = ;
     // NS_ABORT_MSG_UNLESS(TypeId::LookupByNameFailSafe(transport_prot, &tcpTid), "TypeId " << tcpTypeId << " not found");
-    Config::SetDefault("ns3::TcpL4Protocol::SocketType", TypeIdValue(TypeId::LookupByName(transport_prot)));
+    Config::SetDefault("ns3::TcpL4Protocol::SocketType", TypeIdValue(TypeId::LookupByName(std::string("ns3::") + transport_prot)));
 
     Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(41943));
     Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(62914));
@@ -333,7 +336,7 @@ int main(int argc, char *argv[])
     //
     //    }
 
-    int _number_of_flows = 10;
+    int _number_of_flows = 50;
 
     bool isFixed = false;
     if (isFixed)
@@ -364,9 +367,9 @@ int main(int argc, char *argv[])
     for (int i = 0; i < _number_of_flows; i++)
     {
         int f = rand() % numberOfNodes;
-        f = 0;
+        // f = 0;
         int s = rand() % numberOfNodes;
-        s = 4;
+        // s = 4;
         if (isFixed)
             f = _sources[i], s = _sinks[i];
 
@@ -398,7 +401,7 @@ int main(int argc, char *argv[])
 
         ApplicationContainer sourceApps = source.Install(sourceNode);
         sourceApps.Start(Seconds(0.0));
-        sourceApps.Stop(stopTime);
+        sourceApps.Stop(stopTime - Seconds(3));
 
         // Install application on the receiver
         PacketSinkHelper sink("ns3::TcpSocketFactory",
@@ -416,8 +419,8 @@ int main(int argc, char *argv[])
 
     // Create a new directory to store the output of the program
     dir = "_temp/" + std::string("now") + "/";
-    std::string dirToRem = "rm -R " + dir;
-    system(dirToRem.c_str());
+    // std::string dirToRem = "rm -R " + dir;
+    // system(dirToRem.c_str());
     std::string dirToSave = "mkdir -p " + dir;
     if (system(dirToSave.c_str()) == -1)
     {
@@ -438,13 +441,13 @@ int main(int argc, char *argv[])
     out.close();
     Simulator::Schedule(Seconds(0 + 0.02), &TraceThroughput, monitor);
 
-    Simulator::Stop(stopTime + TimeStep(1));
+    Simulator::Stop(stopTime + TimeStep(2));
     Simulator::Run();
 
     // flowmon.SerializeToXmlFile("mytest.flowmonitor", true, true);
     Simulator::Destroy();
 
-    shFlow(&flowmon, monitor, dir + "/tcpwestwood.data");
+    // shFlow(&flowmon, monitor, dir + transport_prot + "_flowmon_stats.data");
 
     return 0;
 }
