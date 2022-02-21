@@ -294,13 +294,13 @@ void shFlow(FlowMonitorHelper *flowmon, Ptr<FlowMonitor> monitor, std::string fl
         NS_LOG_UNCOND("Received Packets = " << iter->second.rxPackets);
         NS_LOG_UNCOND("Lost Packets =" << iter->second.txPackets - iter->second.rxPackets);
         NS_LOG_UNCOND("Packet delivery ratio = " << iter->second.rxPackets * 100.0 / iter->second.txPackets << "%");
-        NS_LOG_UNCOND("Packet loss ratio = " << (iter->second.txPackets - iter->second.rxPackets) * 100.0 / iter->second.txPackets << "%");
+        NS_LOG_UNCOND("Packet loss ratio = " << (iter->second.lostPackets) * 100.0 / iter->second.txPackets << "%");
 
         *flowStream->GetStream() << t.sourceAddress << "-" << t.destinationAddress << " " << iter->second.rxPackets * 100.0 / iter->second.txPackets << " " << (iter->second.txPackets - iter->second.rxPackets) * 100.0 / iter->second.txPackets << "\n";
 
         SentPackets = SentPackets + (iter->second.txPackets);
         ReceivedPackets = ReceivedPackets + (iter->second.rxPackets);
-        LostPackets = LostPackets + (iter->second.txPackets - iter->second.rxPackets);
+        LostPackets = LostPackets + (iter->second.lostPackets);
 
         j++;
     }
@@ -316,7 +316,7 @@ void shFlow(FlowMonitorHelper *flowmon, Ptr<FlowMonitor> monitor, std::string fl
 int main(int argc, char **argv)
 {
     LogComponentEnable("_low_rate", LOG_DEBUG);
-    LogComponentEnable("BulkSendApplication", LOG_LEVEL_INFO);
+    // LogComponentEnable("BulkSendApplication", LOG_LEVEL_INFO);
     LogComponentEnable("LrWpanHelper", LOG_ALL);
     NS_LOG_DEBUG("Starting !");
 
@@ -324,13 +324,13 @@ int main(int argc, char **argv)
     // cmd.AddValue("useIpv6", "Use Ipv6", useV6);
     cmd.Parse(argc, argv);
 
-    int numberOfNodes = 10;
+    int numberOfNodes = 6;
     int _num_left_nodes = numberOfNodes / 2;
     int _num_right_nodes = numberOfNodes / 2;
-    Time stopTime = Seconds(20);
+    Time stopTime = Seconds(100);
     srand(0);
 
-    int _number_of_flows = 2;
+    // int _number_of_flows = 2;
 
     NodeContainer l_nodes;
     l_nodes.Create(_num_left_nodes);
@@ -347,9 +347,9 @@ int main(int argc, char **argv)
     l_mobility.SetPositionAllocator("ns3::GridPositionAllocator",
                                     "MinX", DoubleValue(0.0),
                                     "MinY", DoubleValue(0.0),
-                                    "DeltaX", DoubleValue(5),
-                                    "DeltaY", DoubleValue(10),
-                                    "GridWidth", UintegerValue(3),
+                                    "DeltaX", DoubleValue(.5),
+                                    "DeltaY", DoubleValue(1),
+                                    "GridWidth", UintegerValue(2),
                                     "LayoutType", StringValue("RowFirst"));
 
     l_mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
@@ -360,9 +360,9 @@ int main(int argc, char **argv)
     r_mobility.SetPositionAllocator("ns3::GridPositionAllocator",
                                     "MinX", DoubleValue(35.0),
                                     "MinY", DoubleValue(-50),
-                                    "DeltaX", DoubleValue(5),
-                                    "DeltaY", DoubleValue(10),
-                                    "GridWidth", UintegerValue(3),
+                                    "DeltaX", DoubleValue(.5),
+                                    "DeltaY", DoubleValue(1),
+                                    "GridWidth", UintegerValue(2),
                                     "LayoutType", StringValue("RowFirst"));
 
     r_mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
@@ -381,6 +381,7 @@ int main(int argc, char **argv)
     r_lrWpanHelper.AssociateToPan(r_lrWpanDevices, 1);
 
     InternetStackHelper internetv6;
+    internetv6.SetIpv4StackInstall(false);
     internetv6.InstallAll();
 
     SixLowPanHelper l_sixLowPanHelper;
@@ -389,21 +390,27 @@ int main(int argc, char **argv)
     SixLowPanHelper r_sixLowPanHelper;
     NetDeviceContainer r_devices = r_sixLowPanHelper.Install(r_lrWpanDevices);
 
-    CsmaHelper csmaHelper;
-    NetDeviceContainer w_devices = csmaHelper.Install(w_nodes);
+    PointToPointHelper p2pHelper;
+    p2pHelper.SetDeviceAttribute("DataRate", StringValue("5Mbps"));
+    p2pHelper.SetChannelAttribute("Delay", StringValue("2ms"));
+    NetDeviceContainer w_devices = p2pHelper.Install(w_nodes);
 
     Ipv6AddressHelper address;
     // wired
-    address.SetBase(Ipv6Address("2001:cafe::"), Ipv6Prefix(64));
+    address.SetBase(Ipv6Address("2001:0000:f00d:cafe::"), Ipv6Prefix(64));
     Ipv6InterfaceContainer w_interfaces;
     w_interfaces = address.Assign(w_devices);
     w_interfaces.SetForwarding(1, true);
+    w_interfaces.SetForwarding(0, true);
     w_interfaces.SetDefaultRouteInAllNodes(1);
+
+    // Ipv6StaticRoutingHelper routingHelper;
 
     // left
     address.SetBase("2001:f00d:cafe::", Ipv6Prefix(64));
     Ipv6InterfaceContainer l_interfaces = address.Assign(l_devices);
     l_interfaces.SetForwarding(0, true);
+
     l_interfaces.SetDefaultRouteInAllNodes(0);
 
     for (u_int i = 0; i < l_devices.GetN(); i++)
@@ -425,48 +432,77 @@ int main(int argc, char **argv)
         dev->SetAttribute("UseMeshUnder", BooleanValue(true));
         dev->SetAttribute("MeshUnderRadius", UintegerValue(10));
     }
-    // Ipv6GlobalRoutingHelper::PopulateRoutingTables();
 
-    Ptr<Node> left = r_nodes.Get(1);
-    Ptr<Node> right = l_nodes.Get(1);
+    ApplicationContainer serverApps;
+    ApplicationContainer sinkApps;
 
-    uint16_t sinkPort = 8080;
-    Address sinkAddress;
-    Address anyAddress;
-    sinkAddress = Inet6SocketAddress(
-        r_interfaces.GetAddress(1, 1),
-        sinkPort);
+    srand(0);
+    for (int i = 1; i < _num_left_nodes; i++)
+    {
+        std::cout << i << std::endl;
+        int sin = i;
+        int ser = rand() % _num_right_nodes;
+        /* Install TCP Receiver on the access point */
+        PacketSinkHelper sinkHelper("ns3::TcpSocketFactory", Inet6SocketAddress(Ipv6Address::GetAny(), 9));
+        sinkApps.Add(sinkHelper.Install(r_nodes.Get(sin)));
 
-    anyAddress = Inet6SocketAddress(Ipv6Address::GetAny(), sinkPort);
-    // NS_LOG_DEBUG(r_interfaces.GetAddress(1, 0));
-    // NS_LOG_DEBUG(r_interfaces.GetAddress(1, 1));
-    PacketSinkHelper sinkHelper("ns3::TcpSocketFactory", anyAddress);
+        // /* Install TCP/UDP Transmitter on the station */
+        OnOffHelper server("ns3::TcpSocketFactory", (Inet6SocketAddress(r_interfaces.GetAddress(sin, 1), 9)));
+        server.SetAttribute("PacketSize", UintegerValue(1024));
+        server.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
+        server.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
+        server.SetAttribute("DataRate", DataRateValue(DataRate("1Mbps")));
+        serverApps.Add(server.Install(l_nodes.Get(ser)));
 
-    ApplicationContainer sinkApps = sinkHelper.Install(right);
-    sinkApps.Start(Seconds(1.0));
-    sinkApps.Stop(Seconds(10.0));
+        // std::cout << " after : " << i << std::endl;
+    }
 
-    AddressValue remoteAddress(Inet6SocketAddress(r_interfaces.GetAddress(1, 1), sinkPort));
+    // /* Start Applications */
+    sinkApps.Start(Seconds(0.0));
+    sinkApps.Stop(Seconds(50.0));
+    serverApps.Start(Seconds(1.0));
+    serverApps.Stop(Seconds(46.0));
 
-    // NS_LOG_DEBUG(r_interfaces.GetAddress(1, 0));
-    // NS_LOG_DEBUG(r_interfaces.GetAddress(1, 1));
+    // Ptr<Node> left = w_nodes.Get(0);
+    // Ptr<Node> right = w_nodes.Get(1);
 
-    // NS_LOG_DEBUG(l_interfaces.GetAddress(1, 0));
-    // NS_LOG_DEBUG(l_interfaces.GetAddress(1, 1));
+    // uint16_t sinkPort = 8080;
+    // Address sinkAddress;
+    // Address anyAddress;
+    // sinkAddress = Inet6SocketAddress(
+    //     w_interfaces.GetAddress(1, 1),
+    //     sinkPort);
+
+    // anyAddress = Inet6SocketAddress(Ipv6Address::GetAny(), sinkPort);
+    // // NS_LOG_DEBUG(r_interfaces.GetAddress(1, 0));
+    // // NS_LOG_DEBUG(r_interfaces.GetAddress(1, 1));
+    // PacketSinkHelper sinkHelper("ns3::TcpSocketFactory", anyAddress);
+
+    // ApplicationContainer sinkApps = sinkHelper.Install(right);
+    // sinkApps.Start(stopTime);
+    // sinkApps.Stop(stopTime);
+
+    // AddressValue remoteAddress(Inet6SocketAddress(w_interfaces.GetAddress(1, 1), sinkPort));
+
+    // NS_LOG_DEBUG(w_interfaces.GetAddress(0, 1));
+    // NS_LOG_DEBUG(w_interfaces.GetAddress(1, 1));
+
+    // // NS_LOG_DEBUG(l_interfaces.GetAddress(1, 0));
+    // // NS_LOG_DEBUG(l_interfaces.GetAddress(1, 1));
 
     // BulkSendHelper ftp("ns3::TcpSocketFactory", Ipv6Address());
     // ftp.SetAttribute("Remote", remoteAddress);
     // ApplicationContainer sourceApp = ftp.Install(left);
-    // sourceApp.Start(Seconds(2));
-    // sourceApp.Stop(Seconds(9));
+    // sourceApp.Start(stopTime);
+    // sourceApp.Stop(stopTime);
 
-    Ptr<Socket> ns3TcpSocket = Socket::CreateSocket(left, TcpSocketFactory::GetTypeId());
+    // Ptr<Socket> ns3TcpSocket = Socket::CreateSocket(left, TcpSocketFactory::GetTypeId());
 
-    Ptr<MyApp> app = CreateObject<MyApp>();
-    app->Setup(ns3TcpSocket, sinkAddress, 1040, 1000, DataRate("10Mbps"));
-    left->AddApplication(app);
-    app->SetStartTime(Seconds(1.));
-    app->SetStopTime(Seconds(20.));
+    // Ptr<MyApp> app = CreateObject<MyApp>();
+    // app->Setup(ns3TcpSocket, sinkAddress, 1040, 1000, DataRate("10Mbps"));
+    // left->AddApplication(app);
+    // app->SetStartTime(Seconds(1.));
+    // app->SetStopTime(Seconds(20.));
 
     // uint32_t packetSize = 10;
     // uint32_t maxPacketCount = 5;
@@ -491,12 +527,12 @@ int main(int argc, char **argv)
     // Simulator::Destroy();
     // NS_LOG_DEBUG("Stopping!");
 
-    _output_file_name = dir + _output_file_name;
+    // _output_file_name = dir + _output_file_name;
     FlowMonitorHelper flowmon;
     Ptr<FlowMonitor> monitor = flowmon.InstallAll();
 
-    Simulator::Schedule(Seconds(0 + 0.05), &TraceThroughput, monitor);
-    Simulator::Schedule(Seconds(0 + 0.04), &_initialize_prevs, _number_of_flows);
+    // Simulator::Schedule(Seconds(0 + 0.05), &TraceThroughput, monitor);
+    // Simulator::Schedule(Seconds(0 + 0.04), &_initialize_prevs, _number_of_flows);
 
     Simulator::Stop(stopTime + TimeStep(2));
     Simulator::Run();
