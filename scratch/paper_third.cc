@@ -1,57 +1,4 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
-/*
- * Copyright (c) 2018-20 NITK Surathkal
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- * Authors: Aarti Nandagiri <aarti.nandagiri@gmail.com>
- *          Vivek Jain <jain.vivek.anand@gmail.com>
- *          Mohit P. Tahiliani <tahiliani@nitk.edu.in>
- */
 
-// This program simulates the following topology:
-//
-//           1000 Mbps           10Mbps          1000 Mbps
-//  Sender -------------- R1 -------------- R2 -------------- Receiver
-//              5ms               10ms               5ms
-//
-// The link between R1 and R2 is a bottleneck link with 10 Mbps. All other
-// links are 1000 Mbps.
-//
-// This program runs by default for 100 seconds and creates a new directory
-// called 'bbr-results' in the ns-3 root directory. The program creates one
-// sub-directory called 'pcap' in 'bbr-results' directory (if pcap generation
-// is enabled) and three .dat files.
-//
-// (1) 'pcap' sub-directory contains six PCAP files:
-//     * bbr-0-0.pcap for the interface on Sender
-//     * bbr-1-0.pcap for the interface on Receiver
-//     * bbr-2-0.pcap for the first interface on R1
-//     * bbr-2-1.pcap for the second interface on R1
-//     * bbr-3-0.pcap for the first interface on R2
-//     * bbr-3-1.pcap for the second interface on R2
-// (2) cwnd.dat file contains congestion window trace for the sender node
-// (3) throughput.dat file contains sender side throughput trace
-// (4) queueSize.dat file contains queue length trace from the bottleneck link
-//
-// BBR algorithm enters PROBE_RTT phase in every 10 seconds. The congestion
-// window is fixed to 4 segments in this phase with a goal to achieve a better
-// estimate of minimum RTT (because queue at the bottleneck link tends to drain
-// when the congestion window is reduced to 4 segments).
-//
-// The congestion window and queue occupancy traces output by this program show
-// periodic drops every 10 seconds when BBR algorithm is in PROBE_RTT phase.
 
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
@@ -74,8 +21,20 @@
 
 #include <typeinfo>
 
+// Default Network Topology
+//
+//   Wifi 10.1.3.0
+//                 AP
+//  *    *    *    *
+//  |    |    |    |    10.1.1.0
+// n5   n6 (s)n7   n0 -------------- n1 n2(si) n3   n4
+//                   point-to-point  |    |    |    |
+//                                   ================
+//                                     LAN 10.1.2.0
+
 using namespace ns3;
 
+NS_LOG_COMPONENT_DEFINE("paper_third");
 class _Edge
 {
 public:
@@ -178,14 +137,14 @@ TraceThroughput(Ptr<FlowMonitor> monitor)
         // prev[cnt] = itr->second.txBytes;
         cnt++;
     }
-    // std::cout << cnt << std::endl;
+    // std::cout << _tota << std::endl;
     std::ofstream out(dir + _output_file_name, std::ios::out | std::ios::app);
     double _dx_time = curTime.GetSeconds() - prevTime.GetSeconds();
     out << curTime.GetSeconds();
-    out << "," << 8 * _total_throughput / (1000 * 1000 * _dx_time);                         // throughput
-    out << "," << 8 * _total_cumulative_throughput / (1000 * 1000 * curTime.GetSeconds());  // cumulative
-    out << "," << (_total_recived_packets > 0 ? _total_delay / _total_recived_packets : 1); // delay
-    out << "," << (_total_cumulative_lost_packets > 0 ? _total_cumulative_delay / _total_cumulative_lost_packets : 1);
+    out << "," << 8 * _total_throughput / (1024 * _dx_time);                        // throughput
+    out << "," << 8 * _total_cumulative_throughput / (1024 * curTime.GetSeconds()); // cumulative
+    out << "," << (_total_recived_packets > 0 ? _total_delay : 1);                  // delay
+    out << "," << (_total_cumulative_received_packets > 0 ? _total_cumulative_delay : 1);
     out << "," << _total_lost_packets;
     out << "," << _total_cumulative_lost_packets; // cumul lost packets
     out << std::endl;                             //
@@ -195,35 +154,12 @@ TraceThroughput(Ptr<FlowMonitor> monitor)
     Simulator::Schedule(Seconds(0.1), &TraceThroughput, monitor);
 }
 
-// // Check the queue size
-// void CheckQueueSize(Ptr<QueueDisc> qd)
-// {
-//     uint32_t qsize = qd->GetCurrentSize().GetValue();
-//     Simulator::Schedule(Seconds(0.2), &CheckQueueSize, qd);
-//     std::ofstream q(dir + "/queueSize.dat", std::ios::out | std::ios::app);
-//     q << Simulator::Now().GetSeconds() << " " << qsize << std::endl;
-//     q.close();
-// }
-
-// // Trace congestion window
-// static void CwndTracer(Ptr<OutputStreamWrapper> stream, uint32_t oldval, uint32_t newval)
-// {
-//     *stream->GetStream() << Simulator::Now().GetSeconds() << " " << newval / 1448.0 << std::endl;
-// }
-
-// void TraceCwnd(uint32_t nodeId, uint32_t socketId)
-// {
-//     AsciiTraceHelper ascii;
-//     Ptr<OutputStreamWrapper> stream = ascii.CreateFileStream(dir + "/cwnd.dat");
-//     Config::ConnectWithoutContext("/NodeList/" + std::to_string(nodeId) + "/$ns3::TcpL4Protocol/SocketList/" + std::to_string(socketId) + "/CongestionWindow", MakeBoundCallback(&CwndTracer, stream));
-// }
-
 void shFlow(FlowMonitorHelper *flowmon, Ptr<FlowMonitor> monitor, std::string flow_file)
 {
-    AsciiTraceHelper ascii;
-    static Ptr<OutputStreamWrapper> flowStream = ascii.CreateFileStream(flow_file);
+    // AsciiTraceHelper ascii;
+    // static Ptr<OutputStreamWrapper> flowStream = ascii.CreateFileStream(flow_file);
 
-    *flowStream->GetStream() << "Session DeliveryRatio LossRatio\n";
+    // *flowStream->GetStream() << "Session DeliveryRatio LossRatio\n";
     uint32_t SentPackets = 0;
     uint32_t ReceivedPackets = 0;
     uint32_t LostPackets = 0;
@@ -243,7 +179,7 @@ void shFlow(FlowMonitorHelper *flowmon, Ptr<FlowMonitor> monitor, std::string fl
         NS_LOG_UNCOND("Packet delivery ratio = " << iter->second.rxPackets * 100.0 / iter->second.txPackets << "%");
         NS_LOG_UNCOND("Packet loss ratio = " << (iter->second.txPackets - iter->second.rxPackets) * 100.0 / iter->second.txPackets << "%");
 
-        *flowStream->GetStream() << t.sourceAddress << "-" << t.destinationAddress << " " << iter->second.rxPackets * 100.0 / iter->second.txPackets << " " << (iter->second.txPackets - iter->second.rxPackets) * 100.0 / iter->second.txPackets << "\n";
+        // *flowStream->GetStream() << t.sourceAddress << "-" << t.destinationAddress << " " << iter->second.rxPackets * 100.0 / iter->second.txPackets << " " << (iter->second.txPackets - iter->second.rxPackets) * 100.0 / iter->second.txPackets << "\n";
 
         SentPackets = SentPackets + (iter->second.txPackets);
         ReceivedPackets = ReceivedPackets + (iter->second.rxPackets);
@@ -260,16 +196,16 @@ void shFlow(FlowMonitorHelper *flowmon, Ptr<FlowMonitor> monitor, std::string fl
     NS_LOG_UNCOND("Total Flod id " << j);
 }
 
-NS_LOG_COMPONENT_DEFINE("_topology");
-
 int main(int argc, char *argv[])
 {
+
+    // LogComponentEnable("paper_third", LOG_DEBUG);
+    // LogComponentEnable("TcpWestwoodNew", LOG_DEBUG);
+
     bool verbose = true;
     uint32_t nCsma = 3;
     uint32_t nWifi = 3;
     bool tracing = false;
-
-    double error_p = 0.02;
 
     CommandLine cmd(__FILE__);
     cmd.AddValue("nCsma", "Number of \"extra\" CSMA nodes/devices", nCsma);
@@ -285,7 +221,7 @@ int main(int argc, char *argv[])
     uint32_t delAckCount = 2;
     //    bool bql = true;
     bool enablePcap = false;
-    Time stopTime = Seconds(40);
+    Time stopTime = Seconds(30);
     int _number_of_flows = 2;
 
     // CommandLine cmd(__FILE__);
@@ -323,6 +259,8 @@ int main(int argc, char *argv[])
 
     // Configure the error model
     // Here we use RateErrorModel with packet error rate
+    double error_p = 0.05;
+
     Ptr<UniformRandomVariable> uv = CreateObject<UniformRandomVariable>();
     uv->SetStream(50);
     RateErrorModel error_model;
@@ -331,7 +269,7 @@ int main(int argc, char *argv[])
     error_model.SetRate(error_p);
 
     PointToPointHelper pointToPoint;
-    pointToPoint.SetDeviceAttribute("DataRate", StringValue("5Mbps"));
+    pointToPoint.SetDeviceAttribute("DataRate", StringValue("1Mbps"));
     pointToPoint.SetChannelAttribute("Delay", StringValue("2ms"));
     pointToPoint.SetDeviceAttribute("ReceiveErrorModel", PointerValue(&error_model));
 
@@ -460,16 +398,16 @@ int main(int argc, char *argv[])
     std::ofstream out(dir + _output_file_name, std::ios::out);
     out.clear();
     out << "time(s), "
-        << "instantaneous_throughput(Mbps), "
-        << "avg_throughput(Mbps), "
+        << "instantaneous_throughput(kbps), "
+        << "avg_throughput(kbps), "
         << "instantaneous_delay(s),"
         << "avg_delay(s),"
         << "lost_packets, "
         << "_total_lost_packets" << std::endl;
     out.flush();
     out.close();
-    Simulator::Schedule(Seconds(0 + 0.05), &TraceThroughput, monitor);
-    Simulator::Schedule(Seconds(0 + 0.04), &_initialize_prevs, _number_of_flows);
+    Simulator::Schedule(Seconds(0 + 0.01), &TraceThroughput, monitor);
+    Simulator::Schedule(Seconds(0 + 0.00), &_initialize_prevs, _number_of_flows);
 
     Simulator::Stop(stopTime + TimeStep(2));
     Simulator::Run();
