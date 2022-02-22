@@ -1562,9 +1562,12 @@ namespace ns3
   void
   TcpSocketBase::EnterRecovery(uint32_t currentDelivered)
   {
-    std::cout << "< " << Simulator::Now().GetSeconds() << ", " << m_congestionControl->GetName() << " > "
-              << " TcpSocketBase::EnterRecovery" << std::endl;
-    // std::cout << "< " << Simulator::Now().GetSeconds() << " > TcpSocketBase::EnterRecovery" << std::endl;
+
+    if (m_congestionControl->GetName() == "WestwoodNew")
+    {
+      std::cout << "< " << Simulator::Now().GetSeconds() << ", " << m_congestionControl->GetName() << " > "
+                << " TcpSocketBase::EnterRecovery" << std::endl;
+    }
     NS_LOG_FUNCTION(this);
     NS_ASSERT(m_tcb->m_congState != TcpSocketState::CA_RECOVERY);
 
@@ -2105,10 +2108,11 @@ namespace ns3
           NS_LOG_DEBUG("Leaving Fast Recovery; BytesInFlight() = " << BytesInFlight() << "; cWnd = " << m_tcb->m_cWnd);
 
           ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
-          std::cout << "< " << Simulator::Now().GetSeconds() << ", " << m_congestionControl->GetName() << " > "
-                    << " TcpSocketBase::ExitFastRecovery" << std::endl;
+
           if (m_congestionControl->GetName() == "TcpWestwoodNew")
           {
+            // std::cout << "< " << Simulator::Now().GetSeconds() << ", " << m_congestionControl->GetName() << " > "
+            //           << " TcpSocketBase::ExitFastRecovery" << std::endl;
             _update_rto_after_recovery_complete();
           }
           ////////////////////////////////////// vodro \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
