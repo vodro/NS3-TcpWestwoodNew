@@ -82,6 +82,126 @@ public:
     std::string delay;
 };
 
+std::string dir;
+uint32_t *_prev_txBytes;
+uint32_t *_prev_rxBytes;
+// Maybe Time ?
+double *_prev_delaySum;
+uint32_t *_prev_rxPackets;
+uint32_t *_prev_lostPackets;
+
+Time prevTime = Seconds(0);
+
+void _initialize_prevs(int _number_of_flows)
+{
+    // prev = new uint32_t[2 * _number_of_flows];
+    _prev_txBytes = new uint32_t[2 * _number_of_flows];
+    _prev_rxBytes = new uint32_t[2 * _number_of_flows];
+    _prev_delaySum = new double[2 * _number_of_flows];
+    _prev_rxPackets = new uint32_t[2 * _number_of_flows];
+    _prev_lostPackets = new uint32_t[2 * _number_of_flows];
+
+    for (int i = 0; i < 2 * _number_of_flows; i++)
+    {
+        _prev_txBytes[i] = 0;
+        _prev_rxBytes[i] = 0;
+        _prev_delaySum[i] = 0;
+        _prev_rxPackets[i] = 0;
+        _prev_lostPackets[i] = 0;
+    }
+}
+
+std::string _output_file_name = "_state.csv";
+
+// Calculate throughput
+static void
+TraceThroughput(Ptr<FlowMonitor> monitor)
+{
+    FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats();
+    Time curTime = Now();
+
+    int cnt = 0;
+    uint32_t _total_throughput = 0;
+    double _total_delay = 0;
+    uint32_t _total_recived_packets = 0;
+    uint32_t _total_lost_packets = 0;
+    uint32_t _total_cumulative_lost_packets = 0;
+    double _total_cumulative_throughput = 0;
+    for (auto itr = stats.begin(); itr != stats.end(); itr++)
+    {
+        // std::cout << cnt << std::endl;
+        // std::ofstream thr(dir + "/throughput" + std::to_string(cnt + 1) + ".dat", std::ios::out | std::ios::app);
+        // throughput
+        uint32_t dx_throughput = (itr->second.txBytes - _prev_txBytes[cnt]);
+        _total_throughput += dx_throughput;
+
+        // cumulative throughput
+        _total_cumulative_throughput += (itr->second.txBytes);
+
+        // delay
+        double dx_delay = (itr->second.delaySum.GetSeconds() - _prev_delaySum[cnt]);
+        uint32_t dx_packets_received = (itr->second.rxPackets - _prev_rxPackets[cnt]);
+
+        _total_delay += dx_delay;
+        _total_recived_packets += dx_packets_received;
+
+        // packet loss in number of packets, we should change it to byte according to paper
+        uint32_t dx_packet_lost = (itr->second.lostPackets - _prev_lostPackets[cnt]);
+        _total_lost_packets += dx_packet_lost;
+
+        // cumulative lost packets
+        _total_cumulative_lost_packets += itr->second.lostPackets;
+
+        // update of arrays
+        _prev_txBytes[cnt] = itr->second.txBytes;
+        _prev_rxBytes[cnt] = itr->second.rxBytes;
+        _prev_delaySum[cnt] = itr->second.delaySum.GetSeconds();
+        _prev_rxPackets[cnt] = itr->second.rxPackets;
+        _prev_lostPackets[cnt] = itr->second.lostPackets;
+
+        // thr << curTime.GetSeconds() << " " << 8 * (itr->second.txBytes - prev[cnt]) / (1000 * 1000 * (curTime.GetSeconds() - prevTime.GetSeconds())) << std::endl;
+        // prev[cnt] = itr->second.txBytes;
+        cnt++;
+    }
+    // std::cout << cnt << std::endl;
+    std::ofstream out(dir + _output_file_name, std::ios::out | std::ios::app);
+    double _dx_time = curTime.GetSeconds() - prevTime.GetSeconds();
+    out << curTime.GetSeconds();
+    out << "," << 8 * _total_throughput / (1000 * 1000 * _dx_time);                         // throughput
+    out << "," << 8 * _total_cumulative_throughput / (1000 * 1000 * curTime.GetSeconds());  // cumulative
+    out << "," << (_total_recived_packets > 0 ? _total_delay / _total_recived_packets : 1); // delay
+    out << "," << _total_lost_packets;
+    out << "," << _total_cumulative_lost_packets; // cumul lost packets
+    out << std::endl;                             //
+
+    prevTime = curTime;
+
+    Simulator::Schedule(Seconds(0.2), &TraceThroughput, monitor);
+}
+
+// Check the queue size
+void CheckQueueSize(Ptr<QueueDisc> qd)
+{
+    uint32_t qsize = qd->GetCurrentSize().GetValue();
+    Simulator::Schedule(Seconds(0.2), &CheckQueueSize, qd);
+    std::ofstream q(dir + "/queueSize.dat", std::ios::out | std::ios::app);
+    q << Simulator::Now().GetSeconds() << " " << qsize << std::endl;
+    q.close();
+}
+
+// Trace congestion window
+static void CwndTracer(Ptr<OutputStreamWrapper> stream, uint32_t oldval, uint32_t newval)
+{
+    *stream->GetStream() << Simulator::Now().GetSeconds() << " " << newval / 1448.0 << std::endl;
+}
+
+void TraceCwnd(uint32_t nodeId, uint32_t socketId)
+{
+    AsciiTraceHelper ascii;
+    Ptr<OutputStreamWrapper> stream = ascii.CreateFileStream(dir + "/cwnd.dat");
+    Config::ConnectWithoutContext("/NodeList/" + std::to_string(nodeId) + "/$ns3::TcpL4Protocol/SocketList/" + std::to_string(socketId) + "/CongestionWindow", MakeBoundCallback(&CwndTracer, stream));
+}
+
 void shFlow(FlowMonitorHelper *flowmon, Ptr<FlowMonitor> monitor, std::string flow_file)
 {
     AsciiTraceHelper ascii;
@@ -124,27 +244,79 @@ void shFlow(FlowMonitorHelper *flowmon, Ptr<FlowMonitor> monitor, std::string fl
     NS_LOG_UNCOND("Total Flod id " << j);
 }
 
-NS_LOG_COMPONENT_DEFINE("task-A");
+NS_LOG_COMPONENT_DEFINE("_topology");
 
 int main(int argc, char *argv[])
 {
 
-    // Naming the output directory using local system time
+    // LogComponentEnable("_topology", LOG_LEVEL_INFO);
+    // LogComponentEnable("TcpWestwoodNew", LOG_DEBUG);
+    // LogComponentEnable("TcpWestwood", LOG_LEVEL_ALL);
+    // LogComponentEnable("TcpSocketBase", LOG_FUNCTION);
 
-    Time stopTime = Seconds(10);
+    double error_p = 0.02;
+
+    // Naming the output directory using local system time
+    time_t rawtime;
+    struct tm *timeinfo;
+    char buffer[80];
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
+    strftime(buffer, sizeof(buffer), "%d-%m-%Y-%I-%M-%S", timeinfo);
+    std::string currentTime(buffer);
+
+    std::string transport_prot = "TcpWestwoodNew";
+    // transport_prot = "TcpWestwood";
+
+    // std::string tcpTypeId = "TcpBbr";
+    //    std::string queueDisc = "FifoQueueDisc";
+    int numberOfNodes = 50;
+
+    uint32_t delAckCount = 2;
+    //    bool bql = true;
+    bool enablePcap = false;
+    Time stopTime = Seconds(22);
+    int _number_of_flows = 50;
+    srand(0);
 
     CommandLine cmd(__FILE__);
 
-    int numberOfNodes = 5;
+    cmd.AddValue("transport_prot", "Transport protocol to use: TcpNewReno, TcpWestwood, TcpWestwoodNew", transport_prot);
+    cmd.AddValue("delAckCount", "Delayed ACK count", delAckCount);
+    cmd.AddValue("enablePcap", "Enable/Disable pcap file generation", enablePcap);
+    cmd.AddValue("stopTime", "Stop time for applications / simulation time will be stopTime + 1", stopTime);
+    cmd.Parse(argc, argv);
+
+    std::cout << "our transport : " << transport_prot << std::endl;
+    // _output_file_name = transport_prot +_output_file_name;
+    // transport_prot = ;
+    // NS_ABORT_MSG_UNLESS(TypeId::LookupByNameFailSafe(transport_prot, &tcpTid), "TypeId " << tcpTypeId << " not found");
+    // Config::SetDefault("ns3::TcpL4Protocol::SocketType", TypeIdValue(TypeId::LookupByName(std::string("ns3::") + transport_prot)));
+
+    Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(41943));
+    Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(62914));
+    Config::SetDefault("ns3::TcpSocket::InitialCwnd", UintegerValue(10));
+    Config::SetDefault("ns3::TcpSocket::DelAckCount", UintegerValue(delAckCount));
+    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1448));
 
     std::vector<_Edge *> _edges;
+    //    std::vector<std::vector< Ipv4InterfaceContainer *> > interfaces(numberOfNodes);
     _edges.push_back(new _Edge(0, 1, "100Mbps", "1ms"));
-    _edges.push_back(new _Edge(1, 2, "5Mbps", "35ms"));
+    _edges.push_back(new _Edge(1, 2, "1Mbps", "35ms"));
     _edges.push_back(new _Edge(2, 3, "100Mbps", "20ms"));
     _edges.push_back(new _Edge(2, 4, "100Mbps", "1ms"));
 
     NodeContainer allNodes;
     allNodes.Create(numberOfNodes);
+
+    // Configure the error model
+    // Here we use RateErrorModel with packet error rate
+    Ptr<UniformRandomVariable> uv = CreateObject<UniformRandomVariable>();
+    uv->SetStream(50);
+    RateErrorModel error_model;
+    error_model.SetRandomVariable(uv);
+    error_model.SetUnit(RateErrorModel::ERROR_UNIT_PACKET);
+    error_model.SetRate(error_p);
 
     PointToPointHelper tempLink;
     // Assign IP addresses
@@ -154,15 +326,29 @@ int main(int argc, char *argv[])
     InternetStackHelper internet;
     internet.Install(allNodes);
 
-    // to make a ring we need numberOfNodes amount of edge
-    for (int _i = 0; _i <= numberOfNodes - 1; _i++)
+    // number of edge is number of edge in ring topology
+    for (int _i = 0; _i < numberOfNodes; _i++)
     {
         _Edge *edge = _edges.at(_i % _edges.size());
-
         tempLink.SetDeviceAttribute("DataRate", StringValue(edge->dataRate));
         tempLink.SetChannelAttribute("Delay", StringValue(edge->delay));
 
-        NetDeviceContainer tempEdge = tempLink.Install(allNodes.Get(_i % numberOfNodes), allNodes.Get((_i + 1) % numberOfNodes));
+        tempLink.SetDeviceAttribute("ReceiveErrorModel", PointerValue(&error_model));
+
+        NetDeviceContainer tempEdge = tempLink.Install(allNodes.Get(_i), allNodes.Get((_i + 1) % numberOfNodes));
+        ipv4.NewNetwork();
+        Ipv4InterfaceContainer tempConatainer = ipv4.Assign(tempEdge);
+    }
+
+    for (int _i = 0; _i < numberOfNodes; _i += 10)
+    {
+        _Edge *edge = _edges.at(rand() % _edges.size());
+        tempLink.SetDeviceAttribute("DataRate", StringValue(edge->dataRate));
+        tempLink.SetChannelAttribute("Delay", StringValue(edge->delay));
+
+        tempLink.SetDeviceAttribute("ReceiveErrorModel", PointerValue(&error_model));
+
+        NetDeviceContainer tempEdge = tempLink.Install(allNodes.Get(_i), allNodes.Get((_i * 2 + 1) % numberOfNodes));
         ipv4.NewNetwork();
         Ipv4InterfaceContainer tempConatainer = ipv4.Assign(tempEdge);
     }
@@ -171,10 +357,15 @@ int main(int argc, char *argv[])
 
     // Populate routing tables
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+    //    Ipv4GlobalRoutingHelper::PrintRoutingTableAllAt(Seconds(5), ascii.CreateFileStream("_topology_table"));
 
-    int _number_of_flows = 10;
+    NS_LOG_INFO(" FLOW NOW");
 
-    srand(0);
+    bool isFixed = false;
+    if (isFixed)
+    {
+        _number_of_flows = 3;
+    }
 
     int uniquePort = 44000;
     for (int i = 0; i < _number_of_flows; i++)
@@ -182,7 +373,6 @@ int main(int argc, char *argv[])
         int f = rand() % numberOfNodes;
         // f = 0;
         int s = rand() % numberOfNodes;
-        // std::cout << f << " " << s << std::endl;
         // s = 4;
 
         if (s == f)
@@ -207,13 +397,15 @@ int main(int argc, char *argv[])
         NS_LOG_INFO("( " << f << ", " << s << " ) : " << addr_source << " => " << addr_sink);
 
         ++uniquePort;
-        BulkSendHelper source("ns3::TcpSocketFactory",
-                              InetSocketAddress(addr_sink, uniquePort));
+        OnOffHelper source("ns3::TcpSocketFactory",
+                           InetSocketAddress(addr_sink, uniquePort));
         source.SetAttribute("MaxBytes", UintegerValue(0));
+        source.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
+        source.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
 
         ApplicationContainer sourceApps = source.Install(sourceNode);
         sourceApps.Start(Seconds(0.0));
-        sourceApps.Stop(stopTime - Seconds(3));
+        sourceApps.Stop(stopTime - Seconds(1));
 
         // Install application on the receiver
         PacketSinkHelper sink("ns3::TcpSocketFactory",
@@ -222,18 +414,40 @@ int main(int argc, char *argv[])
         sinkApps.Start(Seconds(0.0));
         sinkApps.Stop(stopTime);
     }
-    std::string dir = "_temp/" + std::string("taskA") + "/";
+
+    // Create a new directory to store the output of the program
+    dir = "_temp/" + std::string("task-A1") + "/";
+    // std::string dirToRem = "rm -R " + dir;
+    // system(dirToRem.c_str());
+    std::string dirToSave = "mkdir -p " + dir;
+    if (system(dirToSave.c_str()) == -1)
+    {
+        exit(1);
+    }
 
     // Check for dropped packets using Flow Monitor
     FlowMonitorHelper flowmon;
     Ptr<FlowMonitor> monitor = flowmon.InstallAll();
+    std::ofstream out(dir + _output_file_name, std::ios::out);
+    out.clear();
+    out << "time(s), "
+        << "throughput(Mbps), "
+        << "cumlative_throughput(Mbps), "
+        << "avg_delay(s),"
+        << "lost_packets, "
+        << "_total_lost_packets" << std::endl;
+    out.flush();
+    out.close();
+    Simulator::Schedule(Seconds(0 + 0.05), &TraceThroughput, monitor);
+    Simulator::Schedule(Seconds(0 + 0.04), &_initialize_prevs, _number_of_flows);
 
     Simulator::Stop(stopTime + TimeStep(2));
     Simulator::Run();
 
+    // flowmon.SerializeToXmlFile("mytest.flowmonitor", true, true);
     Simulator::Destroy();
 
-    shFlow(&flowmon, monitor, dir + "_flowmon_stats.data");
+    shFlow(&flowmon, monitor, dir + transport_prot + "_flowmon_stats.data");
 
     return 0;
 }
