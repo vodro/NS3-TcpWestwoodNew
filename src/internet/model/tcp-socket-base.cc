@@ -1563,7 +1563,7 @@ namespace ns3
   TcpSocketBase::EnterRecovery(uint32_t currentDelivered)
   {
 
-    if (m_congestionControl->GetName() == "WestwoodNew")
+    if (m_congestionControl->GetName() == "TcpWestwoodNew")
     {
       std::cout << "< " << Simulator::Now().GetSeconds() << ", " << m_congestionControl->GetName() << " > "
                 << " TcpSocketBase::EnterRecovery" << std::endl;
