@@ -41,3 +41,5 @@ _temp/
 *.dat
 
 log.txt
+
+plotting/plots
