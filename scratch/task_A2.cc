@@ -42,21 +42,21 @@
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE("_low_rate");
+NS_LOG_COMPONENT_DEFINE("Task-A2");
 
 std::string dir = "_temp";
 
-std::string _output_file_name = "_state.csv";
+std::string _output_file_name = "_details.csv";
 
-void shFlow(FlowMonitorHelper *flowmon, Ptr<FlowMonitor> monitor, std::string flow_file)
+int index_value = 0;
+void printFlowDetails(FlowMonitorHelper *flowmon, Ptr<FlowMonitor> monitor, std::string flow_file)
 {
-    AsciiTraceHelper ascii;
-    static Ptr<OutputStreamWrapper> flowStream = ascii.CreateFileStream(flow_file);
 
-    *flowStream->GetStream() << "Session DeliveryRatio LossRatio\n";
     uint32_t SentPackets = 0;
     uint32_t ReceivedPackets = 0;
     uint32_t LostPackets = 0;
+    uint32_t ThroughPut = 0;
+    double Delay = 0;
     int j = 0;
     Ptr<Ipv6FlowClassifier> classifier = DynamicCast<Ipv6FlowClassifier>(flowmon->GetClassifier6());
     std::map<FlowId, FlowMonitor::FlowStats> stats = monitor->GetFlowStats();
@@ -64,66 +64,103 @@ void shFlow(FlowMonitorHelper *flowmon, Ptr<FlowMonitor> monitor, std::string fl
     for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator iter = stats.begin(); iter != stats.end(); ++iter)
     {
         Ipv6FlowClassifier::FiveTuple t = classifier->FindFlow(iter->first);
-        NS_LOG_UNCOND("\n");
-        NS_LOG_UNCOND("----Flow ID : " << iter->first);
-        NS_LOG_UNCOND(t.sourceAddress << "(" << t.sourcePort << ")"
-                                      << " ===> " << t.destinationAddress << "(" << t.destinationPort << " )");
-        NS_LOG_UNCOND("Sent Packets = " << iter->second.txPackets);
-        NS_LOG_UNCOND("Received Packets = " << iter->second.rxPackets);
-        NS_LOG_UNCOND("Lost Packets =" << iter->second.txPackets - iter->second.rxPackets);
-        NS_LOG_UNCOND("Packet delivery ratio = " << iter->second.rxPackets * 100.0 / iter->second.txPackets << "%");
-        NS_LOG_UNCOND("Packet loss ratio = " << (iter->second.lostPackets) * 100.0 / iter->second.txPackets << "%");
-
-        *flowStream->GetStream() << t.sourceAddress << "-" << t.destinationAddress << " " << iter->second.rxPackets * 100.0 / iter->second.txPackets << " " << (iter->second.txPackets - iter->second.rxPackets) * 100.0 / iter->second.txPackets << "\n";
+        NS_LOG_INFO("\n");
+        NS_LOG_INFO("----Flow ID : " << iter->first);
+        NS_LOG_INFO(t.sourceAddress << " ===> " << t.destinationAddress);
+        NS_LOG_INFO("Sent Packets = " << iter->second.txPackets);
+        NS_LOG_INFO("Received Packets = " << iter->second.rxPackets);
+        NS_LOG_INFO("Lost Packets =" << iter->second.lostPackets);
+        NS_LOG_INFO("Packet delivery ratio = " << iter->second.rxPackets * 100.0 / iter->second.txPackets << "%");
+        NS_LOG_INFO("Packet loss ratio = " << (iter->second.txPackets - iter->second.rxPackets) * 100.0 / iter->second.txPackets << "%");
 
         SentPackets = SentPackets + (iter->second.txPackets);
         ReceivedPackets = ReceivedPackets + (iter->second.rxPackets);
         LostPackets = LostPackets + (iter->second.lostPackets);
-
+        ThroughPut = ThroughPut + iter->second.txBytes /
+                                      (iter->second.timeLastRxPacket - iter->second.timeFirstTxPacket).GetSeconds();
+        Delay = Delay + iter->second.delaySum.GetSeconds();
         j++;
     }
-    NS_LOG_UNCOND("--------Total Results of the simulation----------" << std::endl);
-    NS_LOG_UNCOND("Total sent packets  =" << SentPackets);
-    NS_LOG_UNCOND("Total Received Packets =" << ReceivedPackets);
-    NS_LOG_UNCOND("Total Lost Packets =" << LostPackets);
-    NS_LOG_UNCOND("Packet Loss ratio =" << ((LostPackets * 100.0) / SentPackets) << "%");
-    NS_LOG_UNCOND("Packet delivery ratio =" << ((ReceivedPackets * 100.0) / SentPackets) << "%");
-    NS_LOG_UNCOND("Total Flod id " << j);
+
+    NS_LOG_DEBUG("--------Total Results of the simulation----------" << std::endl);
+    NS_LOG_DEBUG("Total sent packets  =" << SentPackets);
+    NS_LOG_DEBUG("Total Received Packets =" << ReceivedPackets);
+    NS_LOG_DEBUG("Total Lost Packets =" << LostPackets);
+    NS_LOG_DEBUG("Packet Loss ratio =" << ((LostPackets * 100.0) / SentPackets) << "%");
+    NS_LOG_DEBUG("Packet delivery ratio =" << ((ReceivedPackets * 100.0) / SentPackets) << "%");
+    NS_LOG_DEBUG("Throughput = " << (ThroughPut / 1024) << " kBps");
+    NS_LOG_DEBUG("End-to-end Delay = " << (Delay / ReceivedPackets) << " s");
+    NS_LOG_DEBUG("Total Flod id " << j);
+
+    std::ofstream out(dir + _output_file_name, std::ios::app);
+    out << index_value;
+    out << "," << (ThroughPut / 1024);
+    out << "," << (Delay / ReceivedPackets);
+    out << "," << ((LostPackets * 100.0) / SentPackets);
+    out << "," << ((ReceivedPackets * 100.0) / SentPackets);
+    out << std::endl;
 }
 
 int main(int argc, char **argv)
 {
-    LogComponentEnable("_low_rate", LOG_DEBUG);
+    LogComponentEnable("Task-A2", LOG_DEBUG);
     // LogComponentEnable("BulkSendApplication", LOG_LEVEL_INFO);
-    LogComponentEnable("LrWpanHelper", LOG_ALL);
-    NS_LOG_DEBUG("Starting !");
+    // LogComponentEnable("LrWpanHelper", LOG_ALL);
 
-    CommandLine cmd(__FILE__);
-    // cmd.AddValue("useIpv6", "Use Ipv6", useV6);
-    cmd.Parse(argc, argv);
+    int first_data = 0;
+    // Naming the output directory using local system time
 
-    int numberOfNodes = 100;
-    int _num_left_nodes = numberOfNodes;
-    int number_of_flow = 50;
-    int packetSize = 512;
-    int packetRate = 105;
-    int datarate = packetSize * packetRate;
+    Time stopTime = Seconds(25);
+    std::string changing_parameter = "node";
+    int changed_value = 20;
+
+    int number_of_nodes = 20;
+    int number_of_flows = 10;
+    int packet_size = 512;
+    int packet_rate = 100;
     int coverage = 10;
-    // int _num_right_nodes = numberOfNodes / 2;
-    Time stopTime = Seconds(10);
     srand(0);
 
-    // int _number_of_flows = 2;
+    CommandLine cmd(__FILE__);
+    cmd.AddValue("first_data", "is it the first data? should we initiate our file", first_data);
+    cmd.AddValue("stopTime", "Stop time for applications / simulation time will be stopTime + 1", stopTime);
+    cmd.AddValue("changing_parameter", "what parameter are we changing", changing_parameter);
+    cmd.AddValue("changed_value", "what is changed parameters value", changed_value);
+    cmd.AddValue("number_of_nodes", "number of nodes", number_of_nodes);
+    cmd.AddValue("number_of_flows", "number of flows", number_of_flows);
+    cmd.AddValue("packet_rate", "packet rate ", packet_rate);
+    cmd.AddValue("coverage", "coverage", coverage);
+
+    cmd.Parse(argc, argv);
+
+    if (changing_parameter == "node")
+    {
+        index_value = number_of_nodes;
+    }
+    else if (changing_parameter == "flow")
+    {
+        index_value = number_of_flows;
+    }
+    else if (changing_parameter == "packet_rate")
+    {
+        index_value = packet_rate;
+    }
+    else if (changing_parameter == "coverage")
+    {
+        index_value = coverage;
+    }
+    else
+    {
+        NS_LOG_UNCOND("NO PARAMETER ALTERED!");
+    }
+
+    NS_LOG_DEBUG(number_of_nodes << " " << number_of_flows << " " << packet_rate << " " << coverage);
+    int datarate = packet_size * packet_rate;
+
+    int _num_left_nodes = number_of_nodes;
 
     NodeContainer l_nodes;
     l_nodes.Create(_num_left_nodes);
-
-    // NodeContainer r_nodes;
-    // r_nodes.Create(_num_right_nodes);
-
-    // NodeContainer w_nodes;
-    // w_nodes.Add(l_nodes.Get(0));
-    // w_nodes.Add(r_nodes.Get(0));
 
     MobilityHelper l_mobility;
     l_mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
@@ -136,19 +173,6 @@ int main(int argc, char **argv)
                                     "LayoutType", StringValue("RowFirst"));
 
     l_mobility.Install(l_nodes);
-
-    // MobilityHelper r_mobility;
-    // r_mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
-    // r_mobility.SetPositionAllocator("ns3::GridPositionAllocator",
-    //                                 "MinX", DoubleValue(35.0),
-    //                                 "MinY", DoubleValue(-50),
-    //                                 "DeltaX", DoubleValue(.01),
-    //                                 "DeltaY", DoubleValue(.01),
-    //                                 "GridWidth", UintegerValue(ceil(sqrt(_num_left_nodes))),
-    //                                 "LayoutType", StringValue("RowFirst"));
-
-    // r_mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
-    // r_mobility.Install(r_nodes);
 
     LrWpanHelper l_lrWpanHelper;
 
@@ -164,12 +188,6 @@ int main(int argc, char **argv)
 
     l_lrWpanHelper.AssociateToPan(l_lrwpanDevices, 10);
 
-    // LrWpanHelper r_lrWpanHelper;
-
-    // NetDeviceContainer r_lrWpanDevices = r_lrWpanHelper.Install(r_nodes);
-
-    // r_lrWpanHelper.AssociateToPan(r_lrWpanDevices, 1);
-
     InternetStackHelper internetv6;
     internetv6.SetIpv4StackInstall(false);
     internetv6.InstallAll();
@@ -180,20 +198,7 @@ int main(int argc, char **argv)
     // SixLowPanHelper r_sixLowPanHelper;
     // NetDeviceContainer r_devices = r_sixLowPanHelper.Install(r_lrWpanDevices);
 
-    // PointToPointHelper p2pHelper;
-    // p2pHelper.SetDeviceAttribute("DataRate", StringValue("5Mbps"));
-    // p2pHelper.SetChannelAttribute("Delay", StringValue("2ms"));
-    // NetDeviceContainer w_devices = p2pHelper.Install(w_nodes);
-
     Ipv6AddressHelper address;
-    // wired
-    // address.SetBase(Ipv6Address("2001:0000:cafe::"), Ipv6Prefix(64));
-    // Ipv6InterfaceContainer w_interfaces;
-    // w_interfaces = address.Assign(w_devices);
-    // w_interfaces.SetForwarding(1, true);
-    // w_interfaces.SetForwarding(0, true);
-    // w_interfaces.SetDefaultRouteInAllNodes(1);
-    // w_interfaces.SetDefaultRouteInAllNodes(0);
 
     // Ipv6StaticRoutingHelper routingHelper;
 
@@ -211,27 +216,14 @@ int main(int argc, char **argv)
     //     dev->SetAttribute("MeshUnderRadius", UintegerValue(10));
     // }
 
-    // right
-    // address.SetBase("2001:f10d:cafe::", Ipv6Prefix(64));
-    // Ipv6InterfaceContainer r_interfaces = address.Assign(r_devices);
-    // r_interfaces.SetForwarding(0, true);
-    // r_interfaces.SetDefaultRouteInAllNodes(0);
-
-    // for (u_int i = 0; i < r_devices.GetN(); i++)
-    // {
-    //     Ptr<NetDevice> dev = r_devices.Get(i);
-    //     dev->SetAttribute("UseMeshUnder", BooleanValue(true));
-    //     dev->SetAttribute("MeshUnderRadius", UintegerValue(10));
-    // }
-
-    ApplicationContainer serverApps;
+    ApplicationContainer sourceApps;
     ApplicationContainer sinkApps;
     uint_fast32_t unique_port = 45345;
-    srand(0);
-    for (int i = 0; i < number_of_flow / 2; i++)
+
+    for (int i = 0; i < number_of_flows / 2; i++)
     {
-        std::cout << i << std::endl;
-        int sin = i;
+        // std::cout << i << std::endl;
+        int sin = i % _num_left_nodes;
         int ser = rand() % _num_left_nodes;
         if (sin == ser)
         {
@@ -245,140 +237,51 @@ int main(int argc, char **argv)
 
         // /* Install TCP/UDP Transmitter on the station */
         OnOffHelper server("ns3::TcpSocketFactory", (Inet6SocketAddress(l_interfaces.GetAddress(sin, 1), unique_port)));
-        server.SetAttribute("PacketSize", UintegerValue(packetSize));
+        server.SetAttribute("PacketSize", UintegerValue(packet_size));
         server.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
         server.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
         server.SetAttribute("DataRate", DataRateValue(DataRate(datarate)));
-        serverApps.Add(server.Install(l_nodes.Get(ser)));
+        sourceApps.Add(server.Install(l_nodes.Get(ser)));
 
         // std::cout << " after : " << i << std::endl;
     }
 
-    // for (int i = 1; i < _num_left_nodes; i++)
-    // {
-    //     // std::cout << i << std::endl;
-    //     int sin = 0;
-    //     int ser = i;
-    //     unique_port++;
-    //     /* Install TCP Receiver on the access point */
-    //     PacketSinkHelper sinkHelper("ns3::TcpSocketFactory", Inet6SocketAddress(Ipv6Address::GetAny(), unique_port));
-    //     sinkApps.Add(sinkHelper.Install(r_nodes.Get(sin)));
-
-    //     // /* Install TCP/UDP Transmitter on the station */
-    //     OnOffHelper server("ns3::TcpSocketFactory", (Inet6SocketAddress(r_interfaces.GetAddress(sin, 1), unique_port)));
-    //     server.SetAttribute("PacketSize", UintegerValue(1024));
-    //     server.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
-    //     server.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
-    //     server.SetAttribute("DataRate", DataRateValue(DataRate("1Mbps")));
-    //     serverApps.Add(server.Install(l_nodes.Get(ser)));
-
-    //     // std::cout << " after : " << i << std::endl;
-    // }
-
-    // for (int i = 1; i < _num_left_nodes; i++)
-    // {
-    //     // std::cout << i << std::endl;
-    //     int sin = i;
-    //     int ser = 0;
-    //     unique_port++;
-    //     /* Install TCP Receiver on the access point */
-    //     PacketSinkHelper sinkHelper("ns3::TcpSocketFactory", Inet6SocketAddress(Ipv6Address::GetAny(), unique_port));
-    //     sinkApps.Add(sinkHelper.Install(r_nodes.Get(sin)));
-
-    //     // /* Install TCP/UDP Transmitter on the station */
-    //     OnOffHelper server("ns3::TcpSocketFactory", (Inet6SocketAddress(r_interfaces.GetAddress(sin, 1), unique_port)));
-    //     server.SetAttribute("PacketSize", UintegerValue(1024));
-    //     server.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
-    //     server.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
-    //     server.SetAttribute("DataRate", DataRateValue(DataRate("1Mbps")));
-    //     serverApps.Add(server.Install(l_nodes.Get(ser)));
-
-    //     // std::cout << " after : " << i << std::endl;
-    // }
-
-    // /* Start Applications */
+    sourceApps.Start(Seconds(0.0));
+    sourceApps.Stop(stopTime);
     sinkApps.Start(Seconds(0.0));
-    sinkApps.Stop(stopTime + Seconds(20));
-    serverApps.Start(Seconds(1.0));
-    serverApps.Stop(stopTime);
+    sinkApps.Stop(stopTime + Seconds(5));
 
-    // Ptr<Node> left = w_nodes.Get(0);
-    // Ptr<Node> right = w_nodes.Get(1);
+    // Create a new directory to store the output of the program
+    dir = "_temp/" + std::string("a2") + "/";
 
-    // uint16_t sinkPort = 8080;
-    // Address sinkAddress;
-    // Address anyAddress;
-    // sinkAddress = Inet6SocketAddress(
-    //     w_interfaces.GetAddress(1, 1),
-    //     sinkPort);
+    std::string dirToSave = "mkdir -p " + dir;
+    if (system(dirToSave.c_str()) == -1)
+    {
+        exit(1);
+    }
 
-    // anyAddress = Inet6SocketAddress(Ipv6Address::GetAny(), sinkPort);
-    // // NS_LOG_DEBUG(r_interfaces.GetAddress(1, 0));
-    // // NS_LOG_DEBUG(r_interfaces.GetAddress(1, 1));
-    // PacketSinkHelper sinkHelper("ns3::TcpSocketFactory", anyAddress);
-
-    // ApplicationContainer sinkApps = sinkHelper.Install(right);
-    // sinkApps.Start(stopTime);
-    // sinkApps.Stop(stopTime);
-
-    // AddressValue remoteAddress(Inet6SocketAddress(w_interfaces.GetAddress(1, 1), sinkPort));
-
-    // NS_LOG_DEBUG(w_interfaces.GetAddress(0, 1));
-    // NS_LOG_DEBUG(w_interfaces.GetAddress(1, 1));
-
-    // // NS_LOG_DEBUG(l_interfaces.GetAddress(1, 0));
-    // // NS_LOG_DEBUG(l_interfaces.GetAddress(1, 1));
-
-    // BulkSendHelper ftp("ns3::TcpSocketFactory", Ipv6Address());
-    // ftp.SetAttribute("Remote", remoteAddress);
-    // ApplicationContainer sourceApp = ftp.Install(left);
-    // sourceApp.Start(stopTime);
-    // sourceApp.Stop(stopTime);
-
-    // Ptr<Socket> ns3TcpSocket = Socket::CreateSocket(left, TcpSocketFactory::GetTypeId());
-
-    // Ptr<MyApp> app = CreateObject<MyApp>();
-    // app->Setup(ns3TcpSocket, sinkAddress, 1040, 1000, DataRate("10Mbps"));
-    // left->AddApplication(app);
-    // app->SetStartTime(Seconds(1.));
-    // app->SetStopTime(Seconds(20.));
-
-    // uint32_t packetSize = 10;
-    // uint32_t maxPacketCount = 5;
-    // Time interPacketInterval = Seconds(1.);
-    // Ping6Helper ping6;
-
-    // // ping6.SetLocal(wsnDeviceInterfaces.GetAddress(nWsnNodes - 1, 1));
-    // // ping6.SetRemote(wiredDeviceInterfaces.GetAddress(0, 1));
-    // ping6.SetLocal(r_interfaces.GetAddress(1, 1));
-    // ping6.SetRemote(l_interfaces.GetAddress(1, 1));
-
-    // maxPacketCount = 0;
-    // ping6.SetAttribute("MaxPackets", UintegerValue(maxPacketCount));
-    // ping6.SetAttribute("Interval", TimeValue(interPacketInterval));
-    // ping6.SetAttribute("PacketSize", UintegerValue(packetSize));
-    // // ApplicationContainer apps = ping6.Install(wsnNodes.Get(nWsnNodes - 1));
-    // ApplicationContainer apps = ping6.Install(r_nodes.Get(1));
-
-    // apps.Start(Seconds(1.0));
-    // apps.Stop(Seconds(10.0));
-    // Simulator::Run();
-    // Simulator::Destroy();
-    // NS_LOG_DEBUG("Stopping!");
-
-    // _output_file_name = dir + _output_file_name;
+    // Check for dropped packets using Flow Monitor
     FlowMonitorHelper flowmon;
     Ptr<FlowMonitor> monitor = flowmon.InstallAll();
+    _output_file_name = changing_parameter + _output_file_name;
 
-    // Simulator::Schedule(Seconds(0 + 0.05), &TraceThroughput, monitor);
-    // Simulator::Schedule(Seconds(0 + 0.04), &_initialize_prevs, _number_of_flows);
+    if (first_data)
+    {
+        std::ofstream out(dir + _output_file_name, std::ios::out);
+        out << changing_parameter << ", "
+            << "throughput(kBps), "
+            << "end-to-end delay(s),"
+            << "lost packets ratio(%), "
+            << "packet delivery ratio(%)" << std::endl;
+        out.flush();
+        out.close();
+    }
 
-    Simulator::Stop(stopTime + Seconds(20));
+    Simulator::Stop(stopTime + Seconds(2));
     Simulator::Run();
 
     // flowmon.SerializeToXmlFile("mytest.flowmonitor", true, true);
     Simulator::Destroy();
 
-    shFlow(&flowmon, monitor, "_temp/_flowmon_stats.data");
-    return 0;
+    printFlowDetails(&flowmon, monitor, _output_file_name);
 }
