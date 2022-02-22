@@ -1,5 +1,7 @@
 prot=("TcpNewReno" "TcpWestwood" "TcpWestwoodNew")
 
+# prot=("TcpWestwoodNew")
+
 for i in "${prot[@]}"
 do
     echo $i
