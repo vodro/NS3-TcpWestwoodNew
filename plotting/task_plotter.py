@@ -6,6 +6,8 @@ import sys
 
 params = ['node', 'flow']
 
+task_name = 'a1'
+
 
 def plot(df):
 
@@ -22,7 +24,11 @@ def plot(df):
         plt.xlabel(col_names[0])
         plt.ylabel(col_names[i])
         plt.grid()
-        plt.show()
+
+        plt.savefig('./plots/' + task_name + '/' +
+                    col_names[i].strip() + '_vs_' + col_names[0] + '.pdf')
+        plt.clf()
+        # plt.show()
 
 
 if __name__ == '__main__':
