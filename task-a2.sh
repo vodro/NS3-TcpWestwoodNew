@@ -1,6 +1,6 @@
 #!/bin/bash
 
-file_name="scratch/task_A1.cc"
+file_name="scratch/task_A2.cc"
 
 _vary_nodes(){
     nodes=(20 40 60 80 100)
@@ -21,7 +21,7 @@ _vary_nodes(){
 }
 
 _vary_flows(){
-    flows=(10 20 30 40 50)
+    nodes=(10 20 30 40 50)
 
     for (( i = 0; i < 5; i++ ))
     do 
@@ -40,7 +40,7 @@ _vary_flows(){
 
 _vary_packet_rate(){
 
-    flows=(100 200 300 400 500)
+    nodes=(100 200 300 400 500)
 
     for (( i = 0; i < 5; i++ ))
     do 
@@ -59,11 +59,10 @@ _vary_packet_rate(){
 
 _vary_nodes
 _vary_flows
-
 _vary_packet_rate
 
 cd plotting
 
-python3 task_plotter.py a1
+python3 task_plotter.py a2
 
 cd -
