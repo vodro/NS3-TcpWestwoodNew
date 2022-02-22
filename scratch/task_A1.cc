@@ -102,14 +102,14 @@ void printFlowDetails(FlowMonitorHelper *flowmon, Ptr<FlowMonitor> monitor, std:
     for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator iter = stats.begin(); iter != stats.end(); ++iter)
     {
         Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow(iter->first);
-        NS_LOG_DEBUG("\n");
-        NS_LOG_DEBUG("----Flow ID : " << iter->first);
-        NS_LOG_DEBUG(t.sourceAddress << " ===> " << t.destinationAddress);
-        NS_LOG_DEBUG("Sent Packets = " << iter->second.txPackets);
-        NS_LOG_DEBUG("Received Packets = " << iter->second.rxPackets);
-        NS_LOG_DEBUG("Lost Packets =" << iter->second.lostPackets);
-        NS_LOG_DEBUG("Packet delivery ratio = " << iter->second.rxPackets * 100.0 / iter->second.txPackets << "%");
-        NS_LOG_DEBUG("Packet loss ratio = " << (iter->second.txPackets - iter->second.rxPackets) * 100.0 / iter->second.txPackets << "%");
+        NS_LOG_INFO("\n");
+        NS_LOG_INFO("----Flow ID : " << iter->first);
+        NS_LOG_INFO(t.sourceAddress << " ===> " << t.destinationAddress);
+        NS_LOG_INFO("Sent Packets = " << iter->second.txPackets);
+        NS_LOG_INFO("Received Packets = " << iter->second.rxPackets);
+        NS_LOG_INFO("Lost Packets =" << iter->second.lostPackets);
+        NS_LOG_INFO("Packet delivery ratio = " << iter->second.rxPackets * 100.0 / iter->second.txPackets << "%");
+        NS_LOG_INFO("Packet loss ratio = " << (iter->second.txPackets - iter->second.rxPackets) * 100.0 / iter->second.txPackets << "%");
 
         SentPackets = SentPackets + (iter->second.txPackets);
         ReceivedPackets = ReceivedPackets + (iter->second.rxPackets);
@@ -152,10 +152,7 @@ int main(int argc, char *argv[])
     int first_data = 0;
     // Naming the output directory using local system time
 
-    int numberOfNodes = 10;
-
     Time stopTime = Seconds(25);
-    int _number_of_flows = 1;
     std::string changing_parameter = "node";
     int changed_value = 20;
 
@@ -200,17 +197,19 @@ int main(int argc, char *argv[])
         NS_LOG_UNCOND("NO PARAMETER ALTERED!");
     }
 
-    NS_LOG_DEBUG(number_of_nodes << " " << number_of_flows << " " << packet_rate << " " << coverage);
+    NS_LOG_DEBUG("nodes : " << number_of_nodes << "; flows : " << number_of_flows << "; packet_rate : " << packet_rate << "; coverage_area: " << coverage);
     int datarate = packet_size * packet_rate;
 
     std::vector<_Edge *> _edges;
     _edges.push_back(new _Edge(0, 1, "100Mbps", "1ms"));
     _edges.push_back(new _Edge(1, 2, "1Mbps", "35ms"));
+    _edges.push_back(new _Edge(1, 2, "1Mbps", "3ms"));
+
     _edges.push_back(new _Edge(2, 3, "100Mbps", "20ms"));
     _edges.push_back(new _Edge(2, 4, "100Mbps", "1ms"));
 
     NodeContainer allNodes;
-    allNodes.Create(numberOfNodes);
+    allNodes.Create(number_of_nodes);
 
     // Configure the error model
     // Here we use RateErrorModel with packet error rate
@@ -231,7 +230,7 @@ int main(int argc, char *argv[])
     internet.Install(allNodes);
 
     // number of edge is number of edge in ring topology
-    for (int _i = 0; _i < numberOfNodes; _i++)
+    for (int _i = 0; _i < number_of_nodes; _i++)
     {
         _Edge *edge = _edges.at(_i % _edges.size());
         tempLink.SetDeviceAttribute("DataRate", StringValue(edge->dataRate));
@@ -239,7 +238,7 @@ int main(int argc, char *argv[])
 
         tempLink.SetDeviceAttribute("ReceiveErrorModel", PointerValue(&error_model));
 
-        NetDeviceContainer tempEdge = tempLink.Install(allNodes.Get(_i), allNodes.Get((_i + 1) % numberOfNodes));
+        NetDeviceContainer tempEdge = tempLink.Install(allNodes.Get(_i), allNodes.Get((_i + 1) % number_of_nodes));
         ipv4.NewNetwork();
         Ipv4InterfaceContainer tempConatainer = ipv4.Assign(tempEdge);
     }
@@ -249,12 +248,13 @@ int main(int argc, char *argv[])
     //    Ipv4GlobalRoutingHelper::PrintRoutingTableAllAt(Seconds(5), ascii.CreateFileStream("_topology_table"));
 
     // NS_LOG_INFO(" FLOW NOW");
-
+    ApplicationContainer sourceApps;
+    ApplicationContainer sinkApps;
     int uniquePort = 44000;
-    for (int i = 0; i < _number_of_flows; i++)
+    for (int i = 0; 2 * i < number_of_flows; i++)
     {
-        int f = rand() % numberOfNodes;
-        int s = rand() % numberOfNodes;
+        int f = rand() % number_of_nodes;
+        int s = rand() % number_of_nodes;
 
         if (s == f)
         {
@@ -288,22 +288,21 @@ int main(int argc, char *argv[])
         // source.SetAttribute("DataRate", )
         source.SetAttribute("DataRate", DataRateValue(DataRate(datarate)));
 
-        ApplicationContainer sourceApps = source.Install(sourceNode);
-        sourceApps.Start(Seconds(0.0));
-        sourceApps.Stop(stopTime);
+        sourceApps.Add(source.Install(sourceNode));
 
         // Install application on the receiver
         PacketSinkHelper sink("ns3::TcpSocketFactory",
                               InetSocketAddress(Ipv4Address::GetAny(), uniquePort));
-        ApplicationContainer sinkApps = sink.Install(sinkNode);
-        sinkApps.Start(Seconds(0.0));
-        sinkApps.Stop(stopTime + Seconds(1));
+        sinkApps.Add(sink.Install(sinkNode));
     }
 
+    sourceApps.Start(Seconds(0.0));
+    sourceApps.Stop(stopTime);
+    sinkApps.Start(Seconds(0.0));
+    sinkApps.Stop(stopTime + Seconds(1));
     // Create a new directory to store the output of the program
     dir = "_temp/" + std::string("a1") + "/";
-    // std::string dirToRem = "rm -R " + dir;
-    // system(dirToRem.c_str());
+
     std::string dirToSave = "mkdir -p " + dir;
     if (system(dirToSave.c_str()) == -1)
     {

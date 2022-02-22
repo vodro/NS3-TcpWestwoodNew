@@ -154,7 +154,9 @@ int main(int argc, char **argv)
         NS_LOG_UNCOND("NO PARAMETER ALTERED!");
     }
 
-    NS_LOG_DEBUG(number_of_nodes << " " << number_of_flows << " " << packet_rate << " " << coverage);
+    NS_LOG_DEBUG("nodes : " << number_of_nodes << "; flows : " << number_of_flows << "; packet_rate : " << packet_rate << "; coverage_area: " << coverage);
+
+    // NS_LOG_DEBUG(number_of_nodes << " " << number_of_flows << " " << packet_rate << " " << coverage);
     int datarate = packet_size * packet_rate;
 
     int _num_left_nodes = number_of_nodes;
