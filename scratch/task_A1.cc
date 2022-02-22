@@ -67,6 +67,8 @@
 
 using namespace ns3;
 
+NS_LOG_COMPONENT_DEFINE("Task-A1");
+
 class _Edge
 {
 public:
@@ -83,17 +85,16 @@ public:
 };
 
 std::string dir;
-std::string _output_file_name = "_state.csv";
-
+std::string _output_file_name = "_details.csv";
+int index_value = 0;
 void printFlowDetails(FlowMonitorHelper *flowmon, Ptr<FlowMonitor> monitor, std::string flow_file)
 {
-    AsciiTraceHelper ascii;
-    // static Ptr<OutputStreamWrapper> flowStream = ascii.CreateFileStream(dir + flow_file);
 
-    // *flowStream->GetStream() << "Session DeliveryRatio LossRatio\n";
     uint32_t SentPackets = 0;
     uint32_t ReceivedPackets = 0;
     uint32_t LostPackets = 0;
+    uint32_t ThroughPut = 0;
+    double Delay = 0;
     int j = 0;
     Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier>(flowmon->GetClassifier());
     std::map<FlowId, FlowMonitor::FlowStats> stats = monitor->GetFlowStats();
@@ -101,55 +102,106 @@ void printFlowDetails(FlowMonitorHelper *flowmon, Ptr<FlowMonitor> monitor, std:
     for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator iter = stats.begin(); iter != stats.end(); ++iter)
     {
         Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow(iter->first);
-        NS_LOG_UNCOND("\n");
-        NS_LOG_UNCOND("----Flow ID : " << iter->first);
-        NS_LOG_UNCOND(t.sourceAddress << " ===> " << t.destinationAddress);
-        NS_LOG_UNCOND("Sent Packets = " << iter->second.txPackets);
-        NS_LOG_UNCOND("Received Packets = " << iter->second.rxPackets);
-        NS_LOG_UNCOND("Lost Packets =" << iter->second.txPackets - iter->second.rxPackets);
-        NS_LOG_UNCOND("Packet delivery ratio = " << iter->second.rxPackets * 100.0 / iter->second.txPackets << "%");
-        NS_LOG_UNCOND("Packet loss ratio = " << (iter->second.txPackets - iter->second.rxPackets) * 100.0 / iter->second.txPackets << "%");
-
-        // *flowStream->GetStream() << t.sourceAddress << "-" << t.destinationAddress << " " << iter->second.rxPackets * 100.0 / iter->second.txPackets << " " << (iter->second.txPackets - iter->second.rxPackets) * 100.0 / iter->second.txPackets << "\n";
+        NS_LOG_DEBUG("\n");
+        NS_LOG_DEBUG("----Flow ID : " << iter->first);
+        NS_LOG_DEBUG(t.sourceAddress << " ===> " << t.destinationAddress);
+        NS_LOG_DEBUG("Sent Packets = " << iter->second.txPackets);
+        NS_LOG_DEBUG("Received Packets = " << iter->second.rxPackets);
+        NS_LOG_DEBUG("Lost Packets =" << iter->second.lostPackets);
+        NS_LOG_DEBUG("Packet delivery ratio = " << iter->second.rxPackets * 100.0 / iter->second.txPackets << "%");
+        NS_LOG_DEBUG("Packet loss ratio = " << (iter->second.txPackets - iter->second.rxPackets) * 100.0 / iter->second.txPackets << "%");
 
         SentPackets = SentPackets + (iter->second.txPackets);
         ReceivedPackets = ReceivedPackets + (iter->second.rxPackets);
-        LostPackets = LostPackets + (iter->second.txPackets - iter->second.rxPackets);
-
+        LostPackets = LostPackets + (iter->second.lostPackets);
+        ThroughPut = ThroughPut + iter->second.txBytes /
+                                      (iter->second.timeLastRxPacket - iter->second.timeFirstTxPacket).GetSeconds();
+        Delay = Delay + iter->second.delaySum.GetSeconds();
         j++;
     }
-    NS_LOG_UNCOND("--------Total Results of the simulation----------" << std::endl);
-    NS_LOG_UNCOND("Total sent packets  =" << SentPackets);
-    NS_LOG_UNCOND("Total Received Packets =" << ReceivedPackets);
-    NS_LOG_UNCOND("Total Lost Packets =" << LostPackets);
-    NS_LOG_UNCOND("Packet Loss ratio =" << ((LostPackets * 100.0) / SentPackets) << "%");
-    NS_LOG_UNCOND("Packet delivery ratio =" << ((ReceivedPackets * 100.0) / SentPackets) << "%");
-    NS_LOG_UNCOND("Total Flod id " << j);
-}
 
-NS_LOG_COMPONENT_DEFINE("_topology");
+    NS_LOG_DEBUG("--------Total Results of the simulation----------" << std::endl);
+    NS_LOG_DEBUG("Total sent packets  =" << SentPackets);
+    NS_LOG_DEBUG("Total Received Packets =" << ReceivedPackets);
+    NS_LOG_DEBUG("Total Lost Packets =" << LostPackets);
+    NS_LOG_DEBUG("Packet Loss ratio =" << ((LostPackets * 100.0) / SentPackets) << "%");
+    NS_LOG_DEBUG("Packet delivery ratio =" << ((ReceivedPackets * 100.0) / SentPackets) << "%");
+    NS_LOG_DEBUG("Throughput = " << (ThroughPut / 1024) << " kBps");
+    NS_LOG_DEBUG("End-to-end Delay = " << (Delay / ReceivedPackets) << " s");
+    NS_LOG_DEBUG("Total Flod id " << j);
+
+    std::ofstream out(dir + _output_file_name, std::ios::app);
+    out << index_value;
+    out << "," << (ThroughPut / 1024);
+    out << "," << (Delay / ReceivedPackets);
+    out << "," << ((LostPackets * 100.0) / SentPackets);
+    out << "," << ((ReceivedPackets * 100.0) / SentPackets);
+    out << std::endl;
+}
 
 int main(int argc, char *argv[])
 {
 
-    // LogComponentEnable("_topology", LOG_LEVEL_INFO);
+    LogComponentEnable("Task-A1", LOG_DEBUG);
     // LogComponentEnable("TcpWestwoodNew", LOG_DEBUG);
     // LogComponentEnable("TcpWestwood", LOG_LEVEL_ALL);
     // LogComponentEnable("TcpSocketBase", LOG_FUNCTION);
 
     double error_p = 0.03;
 
+    int first_data = 0;
     // Naming the output directory using local system time
 
-    int numberOfNodes = 50;
+    int numberOfNodes = 10;
 
-    Time stopTime = Seconds(22);
-    int _number_of_flows = 50;
+    Time stopTime = Seconds(25);
+    int _number_of_flows = 1;
+    std::string changing_parameter = "node";
+    int changed_value = 20;
+
+    int number_of_nodes = 20;
+    int number_of_flows = 10;
+    int packet_size = 512;
+    int packet_rate = 100;
+    int coverage = 10;
+
     srand(0);
 
     CommandLine cmd(__FILE__);
+    cmd.AddValue("first_data", "is it the first data? should we initiate our file", first_data);
     cmd.AddValue("stopTime", "Stop time for applications / simulation time will be stopTime + 1", stopTime);
+    cmd.AddValue("changing_parameter", "what parameter are we changing", changing_parameter);
+    cmd.AddValue("changed_value", "what is changed parameters value", changed_value);
+    cmd.AddValue("number_of_nodes", "number of nodes", number_of_nodes);
+    cmd.AddValue("number_of_flows", "number of flows", number_of_flows);
+    cmd.AddValue("packet_rate", "packet rate ", packet_rate);
+    cmd.AddValue("coverage", "coverage", coverage);
+
     cmd.Parse(argc, argv);
+
+    if (changing_parameter == "node")
+    {
+        index_value = number_of_nodes;
+    }
+    else if (changing_parameter == "flow")
+    {
+        index_value = number_of_flows;
+    }
+    else if (changing_parameter == "packet_rate")
+    {
+        index_value = packet_rate;
+    }
+    else if (changing_parameter == "coverage")
+    {
+        index_value = coverage;
+    }
+    else
+    {
+        NS_LOG_UNCOND("NO PARAMETER ALTERED!");
+    }
+
+    NS_LOG_DEBUG(number_of_nodes << " " << number_of_flows << " " << packet_rate << " " << coverage);
+    int datarate = packet_size * packet_rate;
 
     std::vector<_Edge *> _edges;
     _edges.push_back(new _Edge(0, 1, "100Mbps", "1ms"));
@@ -196,7 +248,7 @@ int main(int argc, char *argv[])
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
     //    Ipv4GlobalRoutingHelper::PrintRoutingTableAllAt(Seconds(5), ascii.CreateFileStream("_topology_table"));
 
-    NS_LOG_INFO(" FLOW NOW");
+    // NS_LOG_INFO(" FLOW NOW");
 
     int uniquePort = 44000;
     for (int i = 0; i < _number_of_flows; i++)
@@ -228,24 +280,28 @@ int main(int argc, char *argv[])
         ++uniquePort;
         OnOffHelper source("ns3::TcpSocketFactory",
                            InetSocketAddress(addr_sink, uniquePort));
+
+        source.SetAttribute("PacketSize", UintegerValue(packet_size));
         source.SetAttribute("MaxBytes", UintegerValue(0));
         source.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
         source.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
+        // source.SetAttribute("DataRate", )
+        source.SetAttribute("DataRate", DataRateValue(DataRate(datarate)));
 
         ApplicationContainer sourceApps = source.Install(sourceNode);
         sourceApps.Start(Seconds(0.0));
-        sourceApps.Stop(stopTime - Seconds(1));
+        sourceApps.Stop(stopTime);
 
         // Install application on the receiver
         PacketSinkHelper sink("ns3::TcpSocketFactory",
                               InetSocketAddress(Ipv4Address::GetAny(), uniquePort));
         ApplicationContainer sinkApps = sink.Install(sinkNode);
         sinkApps.Start(Seconds(0.0));
-        sinkApps.Stop(stopTime);
+        sinkApps.Stop(stopTime + Seconds(1));
     }
 
     // Create a new directory to store the output of the program
-    dir = "_temp/" + std::string("task-A1") + "/";
+    dir = "_temp/" + std::string("a1") + "/";
     // std::string dirToRem = "rm -R " + dir;
     // system(dirToRem.c_str());
     std::string dirToSave = "mkdir -p " + dir;
@@ -257,24 +313,27 @@ int main(int argc, char *argv[])
     // Check for dropped packets using Flow Monitor
     FlowMonitorHelper flowmon;
     Ptr<FlowMonitor> monitor = flowmon.InstallAll();
-    std::ofstream out(dir + _output_file_name, std::ios::out);
-    out.clear();
-    out << "time(s), "
-        << "throughput(Mbps), "
-        << "cumlative_throughput(Mbps), "
-        << "avg_delay(s),"
-        << "lost_packets, "
-        << "_total_lost_packets" << std::endl;
-    out.flush();
-    out.close();
+    _output_file_name = changing_parameter + _output_file_name;
 
-    Simulator::Stop(stopTime + TimeStep(2));
+    if (first_data)
+    {
+        std::ofstream out(dir + _output_file_name, std::ios::out);
+        out << changing_parameter << ", "
+            << "throughput(kBps), "
+            << "end-to-end delay(s),"
+            << "lost packets ratio(%), "
+            << "packet delivery ratio(%)" << std::endl;
+        out.flush();
+        out.close();
+    }
+
+    Simulator::Stop(stopTime + Seconds(2));
     Simulator::Run();
 
     // flowmon.SerializeToXmlFile("mytest.flowmonitor", true, true);
     Simulator::Destroy();
 
-    printFlowDetails(&flowmon, monitor, dir + "_flowmon_stats.data");
+    printFlowDetails(&flowmon, monitor, _output_file_name);
 
     return 0;
 }
