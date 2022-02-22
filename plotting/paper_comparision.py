@@ -10,6 +10,7 @@ prots = ['TcpNewReno', 'TcpWestwood', 'TcpWestwoodNew']
 def plot(dfs):
 
     col_names = dfs[0].keys().values.tolist()
+    print(dfs[0].head(0))
 
     for i in range(1, len(col_names)):
 
@@ -29,7 +30,7 @@ def plot(dfs):
 if __name__ == '__main__':
     dfs = []
     for prot in prots:
-        df = pd.read_csv('../_temp/now/' + prot + '_state.csv')
+        df = pd.read_csv('../_temp/paper/' + prot + '_state.csv')
         df.name = prot
         dfs.append(df)
     plot(dfs)
