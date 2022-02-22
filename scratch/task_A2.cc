@@ -116,9 +116,9 @@ int main(int argc, char **argv)
 
     int number_of_nodes = 20;
     int number_of_flows = 10;
-    int packet_size = 512;
+    int packet_size = 512 * 8 / 1024;
     int packet_rate = 100;
-    int coverage = 10;
+    int coverage = 60;
     srand(0);
 
     CommandLine cmd(__FILE__);
@@ -161,6 +161,8 @@ int main(int argc, char **argv)
 
     int _num_left_nodes = number_of_nodes;
 
+    // SeedManager see
+
     NodeContainer l_nodes;
     l_nodes.Create(_num_left_nodes);
 
@@ -169,9 +171,9 @@ int main(int argc, char **argv)
     l_mobility.SetPositionAllocator("ns3::GridPositionAllocator",
                                     "MinX", DoubleValue(0.0),
                                     "MinY", DoubleValue(0.0),
-                                    "DeltaX", DoubleValue(.5),
-                                    "DeltaY", DoubleValue(1.2),
-                                    "GridWidth", UintegerValue(ceil(sqrt(_num_left_nodes))),
+                                    "DeltaX", DoubleValue(5),
+                                    "DeltaY", DoubleValue(5),
+                                    "GridWidth", UintegerValue(10),
                                     "LayoutType", StringValue("RowFirst"));
 
     l_mobility.Install(l_nodes);
@@ -180,8 +182,8 @@ int main(int argc, char **argv)
 
     Ptr<SingleModelSpectrumChannel> channel = CreateObject<SingleModelSpectrumChannel>();
     Ptr<RangePropagationLossModel> propModel = CreateObject<RangePropagationLossModel>();
-    Ptr<ConstantSpeedPropagationDelayModel> delayModel = CreateObject<ConstantSpeedPropagationDelayModel>();
-    propModel->SetAttribute("MaxRange", DoubleValue(coverage * 50));
+    // Ptr<ConstantSpeedPropagationDelayModel> delayModel = CreateObject<ConstantSpeedPropagationDelayModel>();
+    propModel->SetAttribute("MaxRange", DoubleValue(coverage * 2));
     channel->AddPropagationLossModel(propModel);
 
     l_lrWpanHelper.SetChannel(channel);
@@ -226,10 +228,11 @@ int main(int argc, char **argv)
     {
         // std::cout << i << std::endl;
         int sin = i % _num_left_nodes;
-        int ser = rand() % _num_left_nodes;
+        int ser = (sin + _num_left_nodes / 2 - 1) % _num_left_nodes;
+        std::cout << sin << " " << ser << std::endl;
         if (sin == ser)
         {
-            i--;
+            i++;
             continue;
         }
         /* Install TCP Receiver on the access point */
@@ -248,10 +251,10 @@ int main(int argc, char **argv)
         // std::cout << " after : " << i << std::endl;
     }
 
-    sourceApps.Start(Seconds(0.0));
-    sourceApps.Stop(stopTime);
+    sourceApps.Start(Seconds(0.02));
+    sourceApps.Stop(Seconds(10));
     sinkApps.Start(Seconds(0.0));
-    sinkApps.Stop(stopTime + Seconds(5));
+    sinkApps.Stop(Seconds(50));
 
     // Create a new directory to store the output of the program
     dir = "_temp/" + std::string("a2") + "/";
@@ -273,13 +276,13 @@ int main(int argc, char **argv)
         out << changing_parameter << ", "
             << "throughput(kBps), "
             << "end-to-end delay(s),"
-            << "lost packets ratio(%), "
+            << "packet drop ratio(%), "
             << "packet delivery ratio(%)" << std::endl;
         out.flush();
         out.close();
     }
 
-    Simulator::Stop(stopTime + Seconds(2));
+    Simulator::Stop(Seconds(50));
     Simulator::Run();
 
     // flowmon.SerializeToXmlFile("mytest.flowmonitor", true, true);

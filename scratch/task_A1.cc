@@ -147,7 +147,7 @@ int main(int argc, char *argv[])
     // LogComponentEnable("TcpWestwood", LOG_LEVEL_ALL);
     // LogComponentEnable("TcpSocketBase", LOG_FUNCTION);
 
-    double error_p = 0.03;
+    double error_p = 0.02;
 
     int first_data = 0;
     // Naming the output directory using local system time
@@ -158,7 +158,7 @@ int main(int argc, char *argv[])
 
     int number_of_nodes = 20;
     int number_of_flows = 10;
-    int packet_size = 512;
+    int packet_size = 512 * 8 / 1024; // 1 KB
     int packet_rate = 100;
     int coverage = 10;
 
@@ -201,12 +201,12 @@ int main(int argc, char *argv[])
     int datarate = packet_size * packet_rate;
 
     std::vector<_Edge *> _edges;
-    _edges.push_back(new _Edge(0, 1, "100Mbps", "1ms"));
-    _edges.push_back(new _Edge(1, 2, "1Mbps", "35ms"));
-    _edges.push_back(new _Edge(1, 2, "1Mbps", "3ms"));
+    _edges.push_back(new _Edge(0, 1, "1Mbps", "2ms"));
+    // _edges.push_back(new _Edge(1, 2, "2Mbps", "5ms"));
+    // _edges.push_back(new _Edge(1, 2, "1Mbps", "3ms"));
 
-    _edges.push_back(new _Edge(2, 3, "100Mbps", "20ms"));
-    _edges.push_back(new _Edge(2, 4, "100Mbps", "1ms"));
+    // _edges.push_back(new _Edge(2, 3, "100Mbps", "20ms"));
+    // _edges.push_back(new _Edge(2, 4, "100Mbps", "1ms"));
 
     NodeContainer allNodes;
     allNodes.Create(number_of_nodes);
@@ -255,10 +255,12 @@ int main(int argc, char *argv[])
     {
         int f = rand() % number_of_nodes;
         int s = rand() % number_of_nodes;
+        s = i % number_of_nodes;
+        f = (i + number_of_nodes / 2 - 1) % number_of_nodes;
 
         if (s == f)
         {
-            i--;
+            i++;
             continue;
         }
         Ptr<Node> sourceNode = allNodes.Get(f);
@@ -296,10 +298,10 @@ int main(int argc, char *argv[])
         sinkApps.Add(sink.Install(sinkNode));
     }
 
-    sourceApps.Start(Seconds(0.0));
-    sourceApps.Stop(stopTime);
+    sourceApps.Start(Seconds(0.02));
+    sourceApps.Stop(Seconds(10));
     sinkApps.Start(Seconds(0.0));
-    sinkApps.Stop(stopTime + Seconds(1));
+    sinkApps.Stop(Seconds(50));
     // Create a new directory to store the output of the program
     dir = "_temp/" + std::string("a1") + "/";
 
@@ -320,13 +322,13 @@ int main(int argc, char *argv[])
         out << changing_parameter << ", "
             << "throughput(kBps), "
             << "end-to-end delay(s),"
-            << "lost packets ratio(%), "
+            << "packet drop ratio(%), "
             << "packet delivery ratio(%)" << std::endl;
         out.flush();
         out.close();
     }
 
-    Simulator::Stop(stopTime + Seconds(2));
+    Simulator::Stop(Seconds(50));
     Simulator::Run();
 
     // flowmon.SerializeToXmlFile("mytest.flowmonitor", true, true);
